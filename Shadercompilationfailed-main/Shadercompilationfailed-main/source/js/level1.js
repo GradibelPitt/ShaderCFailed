@@ -1093,30 +1093,14 @@ const GB_PAGES=[
   // the last page is not for reading yet: every word of it has gone to question marks
   {img:'img/help-bigmoon.jpg',cap:'??? ???? ???????',t:'??? ???? ???????',b:'???? ??? ???? ??? ?????, ?????? ??? ????? ?? ??? ??? ?????, ?????? ??? ?????? ????. ???? ?? (?? ????) ??????? ?? ???????, ??? ????? ??.'},
 ];
-document.body.insertAdjacentHTML('beforeend','<p id="helpk" hidden>Press <kbd>G</kbd> for help</p>'
-  +'<div id="gbook" role="dialog" aria-label="Instruction book" hidden>'
-  +GB_PAGES.map((p,i)=>'<section class="pg" data-i="'+i+'"'+(i?' hidden':'')+'><figure class="photo" style="--r:'+[-4,3,-2,4,-3][i%5]+'deg"><i class="tape"></i>'
-    +'<img src="'+p.img+'" alt="" draggable="false"><figcaption>'+p.cap+'</figcaption></figure><h1>'+p.t+'</h1><p>'+p.b+'</p></section>').join('')
-  +'<nav class="turn"><span class="arr" id="gbl">&#9664;</span><span class="dots">'+GB_PAGES.map(()=>'<i></i>').join('')+'</span><span class="arr" id="gbr">&#9654;</span></nav>'
-  +'<p class="close"><kbd>&larr;</kbd> <kbd>&rarr;</kbd> turn the page &middot; <kbd>G</kbd> close</p></div>');
-let bookOn=false,gbPage=0;
-const helpOK=()=>G.mode==='play'&&!G.climb&&G.pk<0;
-function gbShow(i){gbPage=(i+GB_PAGES.length)%GB_PAGES.length;
-  document.querySelectorAll('#gbook .pg').forEach((s,k)=>{s.hidden=k!==gbPage;});
-  document.querySelectorAll('#gbook .dots i').forEach((d,k)=>d.classList.toggle('on',k===gbPage));}
-function setGBook(on){bookOn=!!on;$('gbook').hidden=!bookOn;if(bookOn)gbShow(gbPage);}
-// capture phase: while the book is open the arrow keys turn its pages instead of turning you
-window.addEventListener('keydown',e=>{if(e.ctrlKey||e.metaKey||e.altKey)return;
-  if(bookOn&&(e.code==='ArrowLeft'||e.code==='ArrowRight')){e.preventDefault();e.stopImmediatePropagation();if(!e.repeat)gbShow(gbPage+(e.code==='ArrowRight'?1:-1));return;}
-  if(e.repeat)return;
-  if(e.code==='KeyG'&&(bookOn||helpOK())){setGBook(!bookOn);e.preventDefault();}
-  else if(e.code==='Escape'&&bookOn)setGBook(false);},true);
-$('gbl').addEventListener('click',()=>gbShow(gbPage-1));$('gbr').addEventListener('click',()=>gbShow(gbPage+1));
+document.body.insertAdjacentHTML('beforeend','<p id="helpk" hidden>Press <kbd>G</kbd> for help</p>');
+// The book is the G book (js/gmenu.js), there in every scene; in the checkerboard rooms it opens on these pages (and a page of controls after them).
+if(window.SCF_G)SCF_G.setPages(()=>G.mode==='play'||G.mode==='leaving'?GB_PAGES:[]); // (the main menu page has no G book)
+const helpOK=()=>G.mode==='play'&&!G.climb&&G.pk<0; // when the "Press G for help" line shows
 // in the red room, a click on the moon takes it, the same as E
-document.getElementById('gl').addEventListener('mousedown',e=>{if(e.button===0&&G.mode==='play'&&!bookOn&&moonAim())interact();});
+document.getElementById('gl').addEventListener('mousedown',e=>{if(e.button===0&&G.mode==='play'&&!(window.SCF_G&&SCF_G.isOpen())&&moonAim())interact();});
 function helpUI(two){
   const on=!two&&helpOK(),el=$('helpk');if(el.hidden!==!on)el.hidden=!on;
-  if(!on&&bookOn)setGBook(false);
   const cap=$('cap');cap.classList.toggle('under',on);
 }
 // On the black stair, while you keep walking up it facing forward (the way that gets you nowhere), a line flickers:

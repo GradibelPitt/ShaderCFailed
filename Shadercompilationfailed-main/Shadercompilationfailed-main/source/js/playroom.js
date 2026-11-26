@@ -1755,7 +1755,7 @@ canvas.addEventListener('mousedown', (e) => {
 addEventListener('mouseup', () => { dragging = false; });
 addEventListener('mousemove', (e) => {
   if (!locked() && !dragging) return;
-  player.yaw -= (e.movementX || 0) * 0.0022; player.pitch = clamp(player.pitch - (e.movementY || 0) * 0.0022, -1.5, 1.5);
+  const sk = 0.0022 * (window.SCF_SETTINGS ? window.SCF_SETTINGS.get('sens') : 1); player.yaw -= (e.movementX || 0) * sk; player.pitch = clamp(player.pitch - (e.movementY || 0) * sk, -1.5, 1.5);   // Settings in the G book
 });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 

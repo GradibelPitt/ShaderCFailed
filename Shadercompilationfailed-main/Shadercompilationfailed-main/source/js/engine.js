@@ -243,7 +243,7 @@ function bindInput(){
     if(!afoot()||flip||xing)return;let dx=0,dy=0;
     if(locked){dx=e.movementX||0;dy=e.movementY||0;}else if(drag){dx=(e.clientX-drag.x)*1.6;dy=(e.clientY-drag.y)*1.6;drag.x=e.clientX;drag.y=e.clientY;}else return;
     if(Math.abs(dx)>250||Math.abs(dy)>250)return;
-    P.yaw-=P.g*dx*0.0022;P.pitch=clamp(P.pitch-dy*0.0022,-1.46,1.46);
+    const k=0.0022*(window.SCF_SETTINGS?SCF_SETTINGS.get('sens'):1);P.yaw-=P.g*dx*k;P.pitch=clamp(P.pitch-dy*k,-1.46,1.46); // Settings in the G book
   };
   // pointerrawupdate delivers mouse motion at the device's own rate instead of once per frame
   if('onpointerrawupdate' in window)window.addEventListener('pointerrawupdate',e=>{if(e.pointerType==='mouse')look(e);});

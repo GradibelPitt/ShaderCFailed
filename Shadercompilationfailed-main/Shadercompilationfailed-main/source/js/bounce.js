@@ -781,7 +781,7 @@ canvas.addEventListener('mousedown', () => {
   try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (err) { /* stay in drag-look */ }
 });
 addEventListener('mouseup', () => { dragging = false; });
-addEventListener('mousemove', (e) => { if (!on || (!locked() && !dragging)) return; player.yaw -= (e.movementX || 0) * 0.0022; player.pitch = clamp(player.pitch - (e.movementY || 0) * 0.0022, -1.5, 1.5); });
+addEventListener('mousemove', (e) => { if (!on || (!locked() && !dragging)) return; const sk = 0.0022 * (window.SCF_SETTINGS ? window.SCF_SETTINGS.get('sens') : 1); player.yaw -= (e.movementX || 0) * sk; player.pitch = clamp(player.pitch - (e.movementY || 0) * sk, -1.5, 1.5); });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
 /* ------------------------------------------------------------------ */
