@@ -1,0 +1,29 @@
+#!/bin/bash
+# 棋格幻境 Checkered Paradox: start the game on a Mac (the Mac version of start_game.bat).
+# Double-click this file in Finder. It starts the local server and opens the game in your browser.
+# The first time, macOS may refuse to open it: right-click it, choose Open, then Open again.
+# If it says it has no permission to run, open Terminal once and run:  chmod +x  (then drag this file into the window, press Return)
+
+cd "$(dirname "$0")" || exit 1
+PORT=8080
+URL="http://127.0.0.1:$PORT"
+
+# open the browser a moment after the server has started
+open_browser() { sleep 1; open "$URL"; }
+
+if command -v node >/dev/null 2>&1; then
+  open_browser &
+  node server.js
+elif command -v python3 >/dev/null 2>&1; then
+  # no Node.js on this Mac: Python's built-in web server does the same job
+  echo "Node.js not found, using Python instead. Game at $URL"
+  open_browser &
+  python3 -m http.server "$PORT" --bind 127.0.0.1
+else
+  echo "Neither Node.js nor Python 3 was found."
+  echo "Install Node.js from https://nodejs.org and double-click this file again."
+fi
+
+echo
+read -n 1 -s -r -p "Press any key to close this window..."
+echo

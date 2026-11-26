@@ -1,0 +1,30 @@
+/* 棋格幻境 Checkered Paradox — one stylesheet for every page */
+:root{
+  /* Layout: nothing but the picture. One canvas, edge to edge, no chrome. */
+  --void:#07080f;
+  --paper:#e9e3d2;
+  color-scheme:dark;
+}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0;background:var(--void);overflow:hidden;-webkit-user-select:none;user-select:none;touch-action:none;-webkit-tap-highlight-color:transparent}
+#gl{position:fixed;inset:0;width:100%;height:100%;display:block;outline:none;cursor:none}
+/* one small line at the very top of the screen (engine.js: say()). It stays out of the middle of the picture; outlined so it reads on white and on red */
+#cap{position:fixed;left:0;right:0;top:max(8px,env(safe-area-inset-top));margin:0;padding:0 18px;pointer-events:none;text-align:center;text-wrap:balance;
+  font-family:"VT323","Courier New",ui-monospace,monospace;font-size:clamp(16px,2vw,32px);line-height:1;letter-spacing:.02em;color:#ffd84a;
+  text-shadow:.07em .07em 0 #000,-.06em 0 0 #000,.06em 0 0 #000,0 -.06em 0 #000,0 .06em 0 #000;
+  -webkit-font-smoothing:none;font-smooth:never;text-rendering:optimizeSpeed}
+/* the questions asked while falling: plain pixel type, white on the dimmed picture, there all at once */
+#q{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(16px,4vh,40px);padding:24px;pointer-events:none;
+  font-family:"VT323","Courier New",ui-monospace,monospace;color:#f4f4f4;text-align:center;cursor:default;
+  -webkit-font-smoothing:none;-moz-osx-font-smoothing:grayscale;font-smooth:never;text-rendering:optimizeSpeed}
+#qt{margin:0;max-width:min(92vw,26em);min-height:2.2em;font-size:clamp(30px,5.2vw,64px);line-height:1.05;letter-spacing:.02em;text-wrap:balance;text-shadow:.07em .07em 0 #000}
+#qo{display:flex;gap:clamp(24px,9vw,120px);justify-content:center}
+#qo button{pointer-events:auto;min-width:4.4em;min-height:48px;padding:.05em .5em;background:none;border:0;border-radius:0;color:inherit;font:inherit;font-size:clamp(30px,4.8vw,58px);letter-spacing:.04em;text-shadow:.07em .07em 0 #000;cursor:pointer}
+#qo button:hover,#qo button:focus-visible,#qo button.pick{background:#f4f4f4;color:#000;text-shadow:none;outline:none} /* the answer under the pointer is shown in reverse, like a cursor on an old screen */
+#qo button.gone{visibility:hidden}
+#nogl{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:28px;margin:0;color:var(--paper);background:var(--void);font:16px/1.6 system-ui,sans-serif;text-align:center}
+/* the black stair: STOP MOVING FORWARD, flickering only while you keep walking up it facing forward (level1.js: stopSign) */
+#stopfwd{position:fixed;left:0;right:0;top:24%;margin:0;padding:0 18px;pointer-events:none;text-align:center;z-index:4;
+  font-family:"VT323","Courier New",ui-monospace,monospace;font-size:clamp(30px,5.6vw,84px);line-height:1;letter-spacing:.08em;color:#ff3b2f;
+  text-shadow:0 0 .25em rgba(255,40,20,.85),0 0 .7em rgba(255,30,10,.45),.06em .06em 0 #000;
+  -webkit-font-smoothing:none;font-smooth:never;text-rendering:optimizeSpeed}

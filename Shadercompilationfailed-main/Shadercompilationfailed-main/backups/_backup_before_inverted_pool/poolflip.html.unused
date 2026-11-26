@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-level="0f">
+<head>
+<!-- The inverted pool: reached from level1.html by climbing down the endless ladder into the water. A copy of playroom.html. -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>棋格幻境 · 倒置泳池 The Pool, Upside Down</title>
+<link href="https://fonts.googleapis.com/css2?family=Gochi+Hand&display=swap" rel="stylesheet">
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden}
+  #c{position:fixed;inset:0;width:100%;height:100%;display:block;outline:none;cursor:pointer}
+  #dot{position:fixed;left:50%;top:50%;width:4px;height:4px;margin:-2px 0 0 -2px;border-radius:50%;background:rgba(225,255,235,.38);pointer-events:none}
+  #book{position:fixed;left:50%;top:50%;width:min(430px,82vw);transform:translate(-50%,-50%) rotate(-2deg);background:#fff8dc;color:#35424a;border-radius:10px;padding:26px 30px 22px;
+    font:22px/1.35 'Gochi Hand','Comic Sans MS','Segoe Print',cursive;box-shadow:0 18px 60px rgba(0,0,0,.55),inset 0 0 0 6px #ffd84a;display:none;pointer-events:none;text-wrap:pretty}
+  #book h1{margin:0 0 6px;font-size:40px;line-height:1;color:#e0692a;font-weight:400}
+  #book p{margin:8px 0}
+  #book ul{list-style:none;margin:10px 0;padding:0}
+  #book li{margin:5px 0;display:flex;align-items:center;gap:10px}
+  #book kbd{font:inherit;min-width:1.5em;text-align:center;padding:0 9px;border-radius:8px;background:#74e3a0;color:#17402b;box-shadow:0 3px 0 #3fae72}
+  #book .fun{font-size:28px;color:#c2478f;margin-top:12px}
+  #book .dots{display:flex;gap:8px;margin-top:10px}
+  #book .dots i{width:20px;height:20px;border-radius:50%;display:block}
+  #ep{position:fixed;left:0;top:0;display:none;pointer-events:none;transform:translate(-50%,-140%);font:700 22px/1 system-ui,sans-serif}
+  #ep b{display:block;min-width:30px;padding:7px 9px;text-align:center;border-radius:9px;background:#fff8dc;color:#17402b;box-shadow:0 4px 0 #c9a21c,0 0 18px 4px rgba(255,216,74,.85);animation:epb .9s ease-in-out infinite}
+  @keyframes epb{0%,100%{transform:scale(1)}50%{transform:scale(1.14)}}
+  #err{position:fixed;left:12px;bottom:12px;max-width:80vw;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;color:#f99;white-space:pre-wrap;display:none}
+</style>
+<script type="importmap">
+{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+  "three-mesh-bvh":"https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.7/build/index.module.js"
+}}
+</script>
+</head>
+<body>
+<canvas id="c" tabindex="0"></canvas>
+<div id="dot"></div>
+<div id="book">
+  <h1>Welcome back!</h1>
+  <p>This was your favorite place to play when you were little.</p>
+  <ul>
+    <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> walk around</li>
+    <li><kbd>Shift</kbd> run really fast</li>
+    <li><kbd>C</kbd> crouch down</li>
+    <li><kbd>E</kbd> pick things up, use things</li>
+  </ul>
+  <p class="fun">Have fun throwing some balls!</p>
+  <div class="dots"><i style="background:#d993c2"></i><i style="background:#c4d232"></i><i style="background:#7fe3a8"></i><i style="background:#e8742e"></i></div>
+</div>
+<div id="ep"><b>E</b></div>
+<div id="err"></div>
+<input id="mf" type="file" accept="audio/*" style="display:none">
+<script>
+  window.__showErr = function (m) { var e = document.getElementById('err'); e.style.display = 'block'; e.textContent += String(m) + '\n'; };
+  window.addEventListener('error', function (e) { window.__showErr(e.message || (e.target && e.target.src) || 'error'); }, true);
+  window.addEventListener('unhandledrejection', function (e) { window.__showErr(e.reason && e.reason.message || e.reason); });
+</script>
+<script type="module" src="js/poolflip.js"></script>
+</body>
+</html>
