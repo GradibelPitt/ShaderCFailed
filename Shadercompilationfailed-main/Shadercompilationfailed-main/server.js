@@ -36,6 +36,10 @@ http.createServer((req, res) => {
   const ext = path.extname(filePath).toLowerCase();
   res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
   fs.createReadStream(filePath).pipe(res);
+}).on('error', (e) => {
+  // another program already has the port (start_game.bat stops an earlier game server first, so this is something else)
+  if (e.code === 'EADDRINUSE') { console.log(`Port ${PORT} is already in use by another program. Close it and start the game again.`); process.exit(1); }
+  throw e;
 }).listen(PORT, '127.0.0.1', () => {
   console.log(`Server running at http://127.0.0.1:${PORT}`);
 });

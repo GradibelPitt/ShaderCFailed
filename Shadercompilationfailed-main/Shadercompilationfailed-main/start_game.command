@@ -18,6 +18,10 @@ have_python3() {
   "$p" -c 'import http.server' >/dev/null 2>&1
 }
 
+# only one game server at a time: stop one left over from an earlier start that still holds the port
+OLD_PIDS="$(lsof -ti "tcp:$PORT" -sTCP:LISTEN 2>/dev/null)"
+if [ -n "$OLD_PIDS" ]; then echo "Stopping the game server left over from before..."; kill $OLD_PIDS 2>/dev/null; sleep 0.5; fi
+
 echo "Starting Shader Compilation Failed at $URL"
 echo "(keep this window open while you play; close it to stop the game)"
 echo
