@@ -1,6 +1,7 @@
 // The back of the white screen: an old beige computer stands in the grass against it, its screen dark.
 // Walk round behind the screen and up to it, press E: there is no power, it will not turn on.
 // With the power strip from the store in your hand (js/equip.js), E plugs it in and the computer starts (SCF_SAVE pcPower: it stays on).
+// Once it is on, E sits you down at it: js/pcos.js, the desktop with his diary on it.
 // It is not drawn by the hub's shader: it is a small CSS 3D model (built from hand-made boxes) laid over the picture and moved with the camera every frame,
 // shown only while the screen is not standing between you and it.
 'use strict';
@@ -50,7 +51,7 @@ if(window.SCF_SAVE&&SCF_SAVE.get('pcPower'))pcBoot(true);
 function pcUse(){
   if(!PC.near)return false;
   const E=window.Equip,b=PC.el.querySelector('.power-btn-3d');if(b){b.classList.add('pressed');setTimeout(()=>b.classList.remove('pressed'),160);}
-  if(window.SCF_SAVE&&SCF_SAVE.get('pcPower')){pcBoot(true);PC.msgT=3.2;pcSay(PC_HUM);return true;}
+  if(window.SCF_SAVE&&SCF_SAVE.get('pcPower')){pcBoot(true);if(window.PCOS){pcSay('');PCOS.open();return true;}PC.msgT=3.2;pcSay(PC_HUM);return true;}
   if(E&&E.sel()==='socket'){E.remove('socket');SCF_SAVE.set('pcPower',true);pcBoot(false);PC.msgT=4.5;pcSay(PC_PLUG);try{Snd.thud();}catch(e){}return true;}
   PC.msgT=3.2;pcSay(E&&E.has('socket')?PC_SCROLL:PC_MSG);try{Snd.thud();}catch(e){}
   return true;

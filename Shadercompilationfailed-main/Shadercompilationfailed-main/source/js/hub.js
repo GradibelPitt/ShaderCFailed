@@ -1,6 +1,6 @@
 // The hall of the white screen: where the stair void lets you out once every question has been answered.
 // Grass to the horizon under a wide sky, the way an old desktop picture looked, and behind you one very large white screen standing in it.
-// On the screen, three places to go back to. Aim at one (or point at it, when the pointer is free) and click.
+// On the screen, three places to go back to, and below them every place found since (SCF_SAVE visited). Aim at one (or point at it, when the pointer is free) and click.
 // The field has no edge: walk away from the screen in any direction and, once it is lost in the haze behind you, it is ahead of you again.
 // Everything here is one full-screen shader (FS_HUB, below, kept in this file with the scene it belongs to): no geometry at all.
 // The first time you arrive, the name of the game is shown before the field is (see "the name of the game", below).
@@ -10,10 +10,21 @@ const HP=384;               // the field repeats every HP metres; a screen stand
 const SW=8,SH=9,ST=0.2;     // the screen: half its width, its height, half its thickness. It stands on the grass at the origin and faces +z.
 const HUB_Z=12;             // you arrive this far in front of it, with your back to it
 const LADDER_MID=0;         // "the very middle of the ladder", in metres above the chamber floor: the landing is 16 m up, the water 16 m down
-// the three lines on the screen, top to bottom: where each is drawn (as a fraction of the screen's height, from the top) and where it sends you
-const HUB_ROWS=[{label:'POOL',y:0.24,go:'pool'},{label:'CHECKERED ROOM',y:0.50,go:'room'},{label:'LADDER',y:0.76,go:'ladder'}];
-const ROW_H=0.20,ROW_U0=0.07,ROW_U1=0.93;
+// the lines on the screen, top to bottom, and where each sends you. The first three are always there.
+// The ones after join the screen once this save has been to that place (each place adds itself to SCF_SAVE visited when you get there).
+// A new place: add a line to HUB_LATER, mark it visited when it starts, and give hubGo a way there.
+const HUB_BASE=[{label:'POOL',go:'pool'},{label:'CHECKERED ROOM',go:'room'},{label:'LADDER',go:'ladder'}];
+const HUB_LATER=[{label:'BOUNCE HOUSE',go:'bounce'},{label:'STORE',go:'store'}];
+const ROW_U0=0.07,ROW_U1=0.93;
+let HUB_ROWS=[],ROW_H=0.20;
+// where each line is drawn (as a fraction of the screen's height, from the top): three lines sit where they always have; more lines close up
+function hubRows(){
+  const v=(window.SCF_SAVE&&Array.isArray(SCF_SAVE.get('visited')))?SCF_SAVE.get('visited'):[];
+  const rows=HUB_BASE.concat(HUB_LATER.filter(r=>v.includes(r.go))).map(r=>Object.assign({},r)),n=rows.length,gap=Math.min(0.26,0.84/n);
+  rows.forEach((r,i)=>{r.y=0.5+(i-(n-1)/2)*gap;});ROW_H=gap*0.77;HUB_ROWS=rows;if(hubRows.ready)HB.dirty=true;
+}
 const HB={x:0,z:HUB_Z,y:0,vy:0,title:-1,hover:-1,pick:-1,pt:0,gone:false,dirty:true,blink:0,step:0,tf:0.7,asp:1.78,mouse:null,down:null,tap:null,prog:null,tex:null,cv:null,wind:null,cur:''};
+hubRows();hubRows.ready=true;
 const HUB_TINT=[1.0,0.995,0.94]; // printed a little warm, like an old photograph of a desktop picture
 
 /* ---------- the picture ---------- */
@@ -141,7 +152,7 @@ function hubPaint(){
   // as large as the longest line allows, whichever face the browser ends up with
   const face='px "VT323","Courier New",ui-monospace,monospace';g.font='100'+face;
   const wide=Math.max(...HUB_ROWS.map(r=>g.measureText(r.label).width))||1;
-  g.font=Math.round(Math.min(H*0.27,100*(ROW_U1-ROW_U0-0.08)*W/wide))+face;g.textAlign='center';g.textBaseline='middle';
+  g.font=Math.round(Math.min(H*0.27*ROW_H/0.2,100*(ROW_U1-ROW_U0-0.08)*W/wide))+face;g.textAlign='center';g.textBaseline='middle';
   HUB_ROWS.forEach((r,i)=>{
     const on=HB.pick>=0?(HB.pick===i&&HB.blink===0):HB.hover===i,y=r.y*H;
     if(on){g.fillStyle='#000';g.fillRect(ROW_U0*W,y-ROW_H*H/2,(ROW_U1-ROW_U0)*W,ROW_H*H);}
@@ -270,7 +281,7 @@ function ttlOff(){HB.title=-1;if(TT.cv)TT.cv.hidden=true;}
 function ttlFirst(){try{if(sessionStorage.getItem('scf.title'))return false;sessionStorage.setItem('scf.title','1');}catch(e){if(TT.seen)return false;}TT.seen=true;return true;}
 /* ---------- arriving, being there, leaving ---------- */
 function enterHub(){
-  SCF_SAVE.set('scene','hub');
+  SCF_SAVE.set('scene','hub');SCF_SAVE.set('hubSeen',true);hubRows(); // the G book's Level select button opens from now on
   if(!HB.prog)hubInit();
   G.mode='hub';G.climb=false;flip=null;xing=null;keys.clear();say('');
   Qs.i=-1;$('q').hidden=true;canvas.style.cursor='';HB.cur='';
@@ -312,6 +323,18 @@ function hubGo(i){
   Snd.mute=false;if(Snd.ctx){Snd.master.gain.setTargetAtTime(0.9,Snd.ctx.currentTime,0.5);Snd.pad.gain.setTargetAtTime(0.05,Snd.ctx.currentTime,0.5);}
   G.shock=0;G.fovAdd=0;G.fall=0;G.told=false;loadLevel(0);G.fade=1;G.mode='play';
   if(go==='ladder')toLadder(LADDER_MID);
+  if(go==='bounce'||go==='store'){toLadder(LADDER_MID);hubWarp(go);}
+}
+// The bounce house and the store are reached through the inverted pool (js/poolflip.js, which loads them both). Wait behind the white
+// until the pool and that place are built, then go down into the pool and straight through its ENTER hole (window.__poolWarpTo).
+function hubWarp(go){
+  const ready=()=>window.__poolReady&&(go==='bounce'?(window.__bounceReady||window.__bounceFailed):(window.__storeReady||window.__storeFailed));
+  const hold=()=>{
+    if(G.mode!=='play')return;                        // gone somewhere else meanwhile
+    if(!ready()){G.fade=1;requestAnimationFrame(hold);return;}
+    window.__poolWarpTo=go;poolHandOver();
+  };
+  poolPreload();hold();
 }
 function tickHub(dt){
   if(HB.title>=0){HB.title+=dt;if(HB.title>=TTL_END)ttlOff();else ttlDraw(HB.title);}

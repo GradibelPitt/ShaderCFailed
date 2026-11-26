@@ -33,7 +33,7 @@ let small = !!(window.SCF_SAVE && window.SCF_SAVE.get('small')), scaleK = small 
 function setScale(k) { scaleK = k; const PS = PS0 * k; PR = 0.28 * PS; H_STAND = 1.7 * PS; H_CROUCH = 0.86 * PS; EYE = 0.1 * PS; }
 setScale(scaleK);
 const STEP = 0.2;             // what the feet take without a jump
-const TUBE_LEN = 8.5, TUBE_HW = 0.5, TUBE_H = 0.95, HAND = 5.0;   // crawl tubes: the hand-over point is HAND metres in from the wall
+const TUBE_LEN = 8.5, TUBE_HW = 0.5, TUBE_H = 0.95, HAND = 1.2;   // crawl tubes: the hand-over point is HAND metres in from the wall
 
 function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 const rand = mulberry32(20261126);
@@ -513,7 +513,7 @@ async function bake() {
   for (let v = 0; v < nv; v++) {
     let f = (0.5 + 0.5 * ao[v]) * GA[v];
     const x = posA[v * 3], z = posA[v * 3 + 2];
-    for (const P of ports) if (x > P.x0 && x < P.x1 && z > P.z0 && z < P.z1) { const dep = (x - P.mx) * P.ox + (z - P.mz) * P.oz; if (dep > 0.05) f *= Math.pow(clamp(1 - (dep - 0.2) / (HAND - 1.4), 0, 1), 1.6); }
+    for (const P of ports) if (x > P.x0 && x < P.x1 && z > P.z0 && z < P.z1) { const dep = (x - P.mx) * P.ox + (z - P.mz) * P.oz; if (dep > 0.05) f *= Math.pow(clamp(1 - (dep - 0.2) / 3.4, 0, 1), 1.6); }   // the tube goes black behind the hand-over point
     litA[v * 3] = rad[v * 3] * f; litA[v * 3 + 1] = rad[v * 3 + 1] * f; litA[v * 3 + 2] = rad[v * 3 + 2] * f;
   }
   geo.attributes.aLit.needsUpdate = true; bakeProgress = 1;
@@ -811,7 +811,7 @@ function leaveBy(i) {
   canvas.style.display = 'none';
   window.__bounceReturn(st);
 }
-let last = -1, time = 0;
+let last = -1, time = 0, since = 0;
 // When you are past the middle of the castle, the blower stops. The light goes with it, and the castle starts to come down.
 // There is time to get out through either tube. If the roof gets you first: dark, and you are back in the tunnel you came by.
 let entry = 0, inside = 0, fail = -1, hiss = null, creakAt = 0;
@@ -862,10 +862,11 @@ function updateAir(dt) {
   }
   return sstep(FAIL_END - 1.5, FAIL_END + 0.4, fail);   // how black the picture is
 }
+const markVisited = (id) => { const s = window.SCF_SAVE; if (!s) return; const v = Array.isArray(s.get('visited')) ? s.get('visited').slice() : []; if (!v.includes(id)) { v.push(id); s.set('visited', v); } };   // the level-select hall shows a line for every place you have been to
 window.__bounceStart = (st) => {
-  if (on || !ready) return false; on = true; inflate(); entry = st && st.port === 1 ? 1 : 0; if (SV().get('rocketTaken')) hideRocket();
+  if (on || !ready) return false; on = true; markVisited('bounce'); inflate(); entry = st && st.port === 1 ? 1 : 0; if (SV().get('rocketTaken')) hideRocket();
   for (const k in keys) keys[k] = false; for (const c of (st && st.held) || []) keys[c] = true;
-  fromPort(st || { port: 0, d: 1.6 }); last = -1; resize();
+  fromPort(st || { port: 0, d: 1.6 }); last = -1; since = 0; resize();
   canvas.style.display = 'block'; grade.uniforms.uFade.value = 1;
   initAudio();
   requestAnimationFrame(frame); return true;
@@ -908,8 +909,8 @@ function frame(now) {
   updateGlints(dt);
   if (EQ()) { if (rocketAimed()) { _rp.set(rocket.x, clamp(camera.position.y + 0.15, 0.5, 1.2), rocket.z).project(camera); EQ().prompt((_rp.x * 0.5 + 0.5) * innerWidth, (-_rp.y * 0.5 + 0.5) * innerHeight); } else EQ().prompt(null); }
   U.uTime.value = time; grade.uniforms.uTime.value = time;
-  grade.uniforms.uFade.value = Math.max(dark, 1 - sstep(0.1, 1.5, d));   // black at the hand-over point, the room's own light by a metre and a half in
-  if (AC && acOut) acOut.gain.value += (sstep(-0.5, 4.5, d) * 0.9 - acOut.gain.value) * Math.min(1, dt * 6);
+  since += dt; grade.uniforms.uFade.value = Math.max(dark, 1 - sstep(-0.6, -0.05, d), 1 - sstep(0, 0.5, since));   // half a second of black on arrival; dark again as you walk back out past the hand-over point
+  if (AC && acOut) acOut.gain.value += (sstep(-0.6, 1.2, d) * 0.9 - acOut.gain.value) * Math.min(1, dt * 6);
   composer.render();
 }
 

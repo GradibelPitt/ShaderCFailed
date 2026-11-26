@@ -1,6 +1,7 @@
 // The G book: press G at any time, in any scene, for a little instruction book.
 // Its pages come from the scene (SCF_G.setPages(fn): fn() returns the pages for right now); every scene also gets a page of controls.
-// Top left of the book: back to the main menu (index.html; click twice). Top right: settings (mouse sensitivity, volume), kept for all saves.
+// Top left of the book: back to the main menu (index.html; click twice). Top middle: Level select, straight to the level-select hall (hub.html),
+// always shown but locked until this save has been there once (SCF_SAVE hubSeen). Top right: settings (mouse sensitivity, volume), kept for all saves.
 // While the book is open the game gets no keys and no clicks, and the pointer is let go so the buttons can be clicked.
 // Also here: the settings themselves (window.SCF_SETTINGS), and the volume, applied to every sound the page makes by putting a gain
 // between each audio context and its speakers (so every scene's own sound code works unchanged). Load this right after js/save.js.
@@ -43,7 +44,8 @@
   background:#fff8dc;color:#35424a;font:21px/1.35 'Gochi Hand','Comic Sans MS','Segoe Print',cursive;box-shadow:0 18px 60px rgba(0,0,0,.55),inset 0 0 0 6px #ffd84a;text-wrap:pretty}
 #gmenu .top{position:absolute;left:18px;right:18px;top:14px;display:flex;justify-content:space-between;gap:10px}
 #gmenu .top button{font:inherit;font-size:18px;line-height:1.1;padding:4px 12px 5px;border:0;border-radius:9px;cursor:pointer;background:#ffe9a8;color:#5a4318;box-shadow:0 3px 0 #d8b24a}
-#gmenu .top button:hover{background:#ffdf86}#gmenu .top button.armed{background:#e0692a;color:#fff;box-shadow:0 3px 0 #9b3a12}
+#gmenu .top button:hover{background:#ffdf86}#gmenu .top button.locked{background:#e6e0cc;color:#9a9480;box-shadow:0 3px 0 #c4bca4;cursor:not-allowed}
+#gmenu .top button.no{animation:gm_no .3s}@keyframes gm_no{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}#gmenu .top button.armed{background:#e0692a;color:#fff;box-shadow:0 3px 0 #9b3a12}
 #gmenu h1{margin:0 0 4px;font-size:34px;line-height:1;font-weight:400;color:#e0692a;text-align:center}
 #gmenu .pg p{margin:6px 0 0;text-align:center}
 #gmenu .photo{position:relative;width:min(300px,64vw);margin:6px auto 14px;padding:10px 10px 34px;background:#fff;box-shadow:0 6px 16px rgba(0,0,0,.28),0 1px 3px rgba(0,0,0,.2);transform:rotate(var(--r,-3deg))}
@@ -67,7 +69,7 @@
       const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'https://fonts.googleapis.com/css2?family=Gochi+Hand&display=swap'; document.head.appendChild(l);
     }
     root = document.createElement('div'); root.id = 'gmenu'; root.hidden = true;
-    root.innerHTML = '<div class="book" role="dialog" aria-label="Instruction book"><div class="top"><button id="gmMain">&larr; Main menu</button><button id="gmSet">Settings &#9881;</button></div><div id="gmBody"></div></div>';
+    root.innerHTML = '<div class="book" role="dialog" aria-label="Instruction book"><div class="top"><button id="gmMain">&larr; Main menu</button><button id="gmHub"></button><button id="gmSet">Settings &#9881;</button></div><div id="gmBody"></div></div>';
     document.body.appendChild(root);
     root.addEventListener('mousedown', (e) => { e.stopPropagation(); if (e.target === root) setOpen(false); });
     root.addEventListener('click', (e) => e.stopPropagation());
@@ -78,6 +80,18 @@
       setTimeout(() => { if (performance.now() - leaveArmed >= 2900) { b.classList.remove('armed'); b.innerHTML = '&larr; Main menu'; } }, 3000);
     };
     root.querySelector('#gmSet').onclick = () => { view = view === 'settings' ? 'pages' : 'settings'; render(); };
+    root.querySelector('#gmHub').onclick = () => {
+      const b = root.querySelector('#gmHub');
+      if (!hubSeen()) { b.classList.remove('no'); void b.offsetWidth; b.classList.add('no'); return; }
+      if (typeof G !== 'undefined' && G.mode === 'hub') { setOpen(false); return; }   // already there
+      location.href = 'hub.html';
+    };
+  }
+  const hubSeen = () => !!(window.SCF_SAVE && (SCF_SAVE.get('hubSeen') || SCF_SAVE.get('pcPower')));
+  function hubButton() {
+    const b = root.querySelector('#gmHub'), ok = hubSeen();
+    b.classList.toggle('locked', !ok); b.innerHTML = ok ? 'Level select' : '&#x1F512; Level select';
+    b.title = ok ? 'Go straight to the level-select hall' : 'Locked: you have not found the level-select hall yet';
   }
   function render() {
     const body = root.querySelector('#gmBody'); root.querySelector('#gmSet').innerHTML = view === 'settings' ? '&larr; Back to the book' : 'Settings &#9881;';
@@ -109,7 +123,7 @@
       pages = own.concat([controlsPage()]); if (page >= pages.length) page = 0; view = 'pages';
       try { if (document.pointerLockElement) document.exitPointerLock(); } catch (e) {}
       window.dispatchEvent(new Event('blur'));   // every scene lets go of held keys on blur: nobody keeps walking while the book is open
-      render();
+      hubButton(); render();
     }
     root.hidden = !on;
   }

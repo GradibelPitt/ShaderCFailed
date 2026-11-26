@@ -23,7 +23,7 @@ const SOLO = document.documentElement.dataset.store === 'solo';
 const W = 9.2, D = 16, CEIL = 2.2;              // the shop floor: x 0..W, z 0..D (z runs from the back wall to the front windows)
 const SHELF_H = 1.22, GZ0 = 2.0, GZ1 = 12.4;      // shelving height; where the long shelving runs start and end
 const LEVELS = [0.1, 0.39, 0.68, 0.97];           // the tops of the shelves
-const TUBE_HW = 0.5, TUBE_H = 0.95, TUBE_LEN = 8.5, HAND = 5.0, DOOR_X = 7.95;   // the back corridor, same section as the pool's tunnels
+const TUBE_HW = 0.5, TUBE_H = 0.95, TUBE_LEN = 8.5, HAND = 1.2, DOOR_X = 7.95;   // the back corridor, same section as the pool's tunnels
 const G = 13, PS0 = 0.3, STEP = 0.13;
 function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 const rand = mulberry32(19960412);
@@ -516,11 +516,12 @@ function leave() {
   if (window.Equip) window.Equip.prompt(null);
   canvas.style.display = 'none'; window.__storeReturn(st);
 }
-let last = -1, time = 0;
+let last = -1, time = 0, since = 0;
+const markVisited = (id) => { const s = window.SCF_SAVE; if (!s) return; const v = Array.isArray(s.get('visited')) ? s.get('visited').slice() : []; if (!v.includes(id)) { v.push(id); s.set('visited', v); } };   // the level-select hall shows a line for every place you have been to
 window.__storeStart = (st) => {
-  if (on || !ready) return false; on = true;
+  if (on || !ready) return false; on = true; markVisited('store');
   for (const k in keys) keys[k] = false; for (const c of (st && st.held) || []) keys[c] = true;
-  fromPort(st || { d: 1.4 }); syncPickups(); last = -1; resize();
+  fromPort(st || { d: 1.4 }); syncPickups(); last = -1; since = 0; resize();
   canvas.style.display = 'block'; grade.uniforms.uFade.value = 1; initAudio();
   requestAnimationFrame(frame); return true;
 };
@@ -552,8 +553,8 @@ function frame(now) {
   }
   const P = aimed();
   if (window.Equip) { if (P) { _p.copy(P.at).project(camera); window.Equip.prompt((_p.x * 0.5 + 0.5) * innerWidth, (-_p.y * 0.5 + 0.5) * innerHeight); } else window.Equip.prompt(null); }
-  grade.uniforms.uTime.value = time; grade.uniforms.uFade.value = 1 - sstep(0.1, 1.5, d);
-  if (AC && acOut) acOut.gain.value += (sstep(-0.5, 4.5, d) * 0.9 - acOut.gain.value) * Math.min(1, dt * 6);
+  grade.uniforms.uTime.value = time; since += dt; grade.uniforms.uFade.value = Math.max(1 - sstep(-0.6, -0.05, d), 1 - sstep(0, 0.5, since));   // half a second of black on arrival; dark again walking back out
+  if (AC && acOut) acOut.gain.value += (sstep(-0.6, 1.2, d) * 0.9 - acOut.gain.value) * Math.min(1, dt * 6);
   composer.render();
 }
 

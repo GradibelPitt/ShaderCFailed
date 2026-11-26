@@ -897,14 +897,18 @@ function tunnelOfF(x, y, z) { if (y < H - 3.05 || y > H - 1.9) return -1; if (z 
 // The two ENTER holes sit high in the wall now (their floor is the old tunnel ceiling, well above a jump).
 // Walk or jump at one while facing it and you climb straight in, the way a kid scrambles up into a slide tube.
 const TUN_FLOOR_F = H - 2.95;
+// Forwards or backwards: walking at the hole facing it (W), or with your back to it (S), both take you in.
+// If what the hole leads to is ready, you go straight through, right there at the hole (handOver below); if not, you climb into the dark tunnel and it takes you once it is.
 function tryEnterTunnel() {
-  if (player.mode !== 'walk' || player.mantle || player.swim || !keys.KeyW) return false;
+  if (player.mode !== 'walk' || player.mantle || player.swim || !(keys.KeyW || keys.KeyS)) return false;
   const p = player.pos, fx = -Math.sin(player.yaw), fz = -Math.cos(player.yaw);
   if (p.y > TUN_FLOOR_F - 0.03 || p.y < TUN_FLOOR_F - 0.95) return false;
-  for (const a of TUNF) {
-    const dx = p.x - a.mx, dz = p.z - a.mz, s = dx * a.ix + dz * a.iz, u = dx * -a.iz + dz * a.ix;
+  for (let k = 0; k < TUNF.length; k++) {
+    const a = TUNF[k], dx = p.x - a.mx, dz = p.z - a.mz, s = dx * a.ix + dz * a.iz, u = dx * -a.iz + dz * a.ix;
     if (s < -0.75 || s > 0.05 || Math.abs(u) > 0.5) continue;
-    if (fx * a.ix + fz * a.iz < 0.45) continue;
+    const face = fx * a.ix + fz * a.iz;
+    if (!((keys.KeyW && !keys.KeyS && face > 0.45) || (keys.KeyS && !keys.KeyW && face < -0.45))) continue;
+    { const S = sceneOf(k); if (S && S.ready() && !S.failed()) { handOver(k, s, u); return true; } }
     const uc = clamp(u, -0.3, 0.3), tx = a.mx + a.ix * 0.32 - a.iz * uc, tz = a.mz + a.iz * 0.32 + a.ix * uc;
     player.mantle = { t: 0, dur: 0.5, from: p.clone(), to: new V3(tx, TUN_FLOOR_F + 0.005, tz) };
     player.vel.set(0, 0, 0); player.crouch = false; return true;
@@ -913,18 +917,18 @@ function tryEnterTunnel() {
 }
 // Which ENTER hole leads where. 0: the hole straight ahead from the ladder, in the back wall by the first slide; 1: the hole on the
 // left, in the side wall beside the water. The bounce house's two crawl tubes both come back out of hole 0.
-const BOUNCE_HOLE = 0, STORE_HOLE = 1;
+const BOUNCE_HOLE = 0, STORE_HOLE = 1, HAND_IN = 0.6;
 const SCENES = [
   { hole: BOUNCE_HOLE, start: () => window.__bounceStart, ready: () => window.__bounceReady, failed: () => window.__bounceFailed, size: () => window.__bounceSize },
   { hole: STORE_HOLE, start: () => window.__storeStart, ready: () => window.__storeReady, failed: () => window.__storeFailed, size: () => window.__storeSize },
 ];
 const sceneOf = (k) => SCENES.find((S) => S.hole === k);
 let away = null;   // the scene that has the screen, while one does
-// PORTAL_D metres into a tunnel, in the dark: hand the player over. Both sides describe someone in a tunnel the same way:
+// At the hole (or HAND_IN metres into its tunnel, if you had to climb in while it was still being built): hand the player over. Both sides describe someone in a tunnel the same way:
 // d metres past the hand-over point, u metres to the side, y above the tunnel floor, heading and speed relative to the way in.
 function handOver(k, s, u) {
   const S = sceneOf(k), a = TUNF[k], v = player.vel;
-  const st = { port: 0, d: Math.min(s - PORTAL_D, 0.5), u, y: player.pos.y - TUN_FLOOR_F, yaw: player.yaw - a.yawIn, pitch: player.pitch,
+  const st = { port: 0, d: clamp(s - HAND_IN, 0, 0.5), u, y: Math.max(0, player.pos.y - TUN_FLOOR_F), yaw: player.yaw - a.yawIn, pitch: player.pitch,
     vs: v.x * a.ix + v.z * a.iz, vu: v.x * -a.iz + v.z * a.ix, vy: v.y, h: player.h, crouch: player.crouch, bob: player.bob, small, scale: scaleK, held: Object.keys(keys).filter((c) => keys[c]) };
   if (!S.start()(st)) return;
   away = S; for (const c in keys) keys[c] = false;
@@ -935,7 +939,7 @@ function handOver(k, s, u) {
 function returnTo(k, st) {
   if (!away) return; away = null;
   small = !!st.small; setScale(st.scale || (small ? 0.42 : 1));   // the size gun may have been used in there
-  const a = TUNF[k], s = PORTAL_D + Math.min(st.d, -0.3), u = clamp(st.u, -0.4, 0.4), p = player.pos;
+  const a = TUNF[k], s = clamp(HAND_IN + Math.min(st.d, -0.3), 0.25, HAND_IN - 0.25), u = clamp(st.u, -0.4, 0.4), p = player.pos;
   p.set(a.mx + a.ix * s - a.iz * u, TUN_FLOOR_F + Math.max(0, st.y) + 0.005, a.mz + a.iz * s + a.ix * u);
   player.vel.set(a.ix * st.vs - a.iz * st.vu, st.vy, a.iz * st.vs + a.ix * st.vu);
   player.yaw = a.yawIn + st.yaw; player.pitch = st.pitch; player.h = st.h; player.crouch = !!st.crouch; player.bob = st.bob || 0;
@@ -948,7 +952,8 @@ window.__bounceReturn = (st) => returnTo(BOUNCE_HOLE, st);   // whichever of its
 window.__storeReturn = (st) => returnTo(STORE_HOLE, st);
 function portalPlayer() {
   { const p = player.pos, k = tunnelOfF(p.x, p.y, p.z); if (k < 0) return;
-    const a = TUNF[k], b = TUNF[1 - k], s = (p.x - a.mx) * a.ix + (p.z - a.mz) * a.iz; if (s < PORTAL_D) return;
+    const a = TUNF[k], b = TUNF[1 - k], s = (p.x - a.mx) * a.ix + (p.z - a.mz) * a.iz;
+    if (s < HAND_IN || (s < PORTAL_D && sceneOf(k).failed())) return;
     { const S = sceneOf(k); if (!S.failed()) { if (S.ready()) handOver(k, s, (p.x - a.mx) * -a.iz + (p.z - a.mz) * a.ix); return; } }   // still being built: the tunnel just goes on, dark
     // (only if that scene could not be loaded at all: the old fold, one tunnel straight into the other)
     const u = (p.x - a.mx) * -a.iz + (p.z - a.mz) * a.ix, s2 = Math.max(2 * PORTAL_D - s, PORTAL_D - 0.5);
@@ -1605,7 +1610,15 @@ window.__poolStart = (held) => {
   for (const c of held || []) keys[c] = true;
   canvas.style.display = 'block'; document.getElementById('dot').style.display = 'block';
   requestAnimationFrame(frame);
+  // from the level-select hall (js/hub.js): straight on through the hole that leads there
+  if (window.__poolWarpTo) { const go = window.__poolWarpTo; window.__poolWarpTo = null; warpTo(go === 'store' ? STORE_HOLE : BOUNCE_HOLE); }
 };
+function warpTo(k) {
+  const a = TUNF[k], S = sceneOf(k); if (!S || !S.ready() || S.failed()) return;
+  player.mode = 'walk'; player.mantle = null; player.swim = false; player.crouch = false; blink = null;
+  player.pos.set(a.mx + a.ix * 0.3, TUN_FLOOR_F + 0.005, a.mz + a.iz * 0.3); player.vel.set(0, 0, 0); player.yaw = a.yawIn; player.pitch = 0;
+  handOver(k, HAND_IN, 0);
+}
 // Up the ladder and out through the top of the pool: this canvas goes, the loop stops, and level 1 takes over again low on its ladder in the deep water.
 function leavePool() {
   if (!poolOn) return; poolOn = false; poolLeft = true;
