@@ -136,6 +136,12 @@ function tryBuild(cfg,rng){
     const c=far(cand);if(c<0)return null;L.orbs.push(c);L.orbW.push(1);dm.push(bfsDist(L,c));nb++;}
   while(L.orbs.length<cfg.orbs){const cand=[];for(let c=0;c<N;c++)if(!L.fh[c]&&c!==start&&c!==ex&&L.st[c]<0&&!L.closet[c]&&!L.orbs.includes(c)&&can(c,0))cand.push(c);
     const c=far(cand);if(c<0)break;L.orbs.push(c);L.orbW.push(0);dm.push(bfsDist(L,c));}
+  // spares: the red door wants L.need moons (one socket each), but a few more lie about indoors in the ordinary world,
+  // so missing the hard ones (closets, pits, the far world) is not the end of it. More than needed is fine; fewer is not.
+  L.need=L.orbs.length;
+  for(let k=0,tries=0;k<(cfg.spareOrbs??3)&&tries<2;){
+    const cand=[];for(let c=0;c<N;c++)if(!L.fh[c]&&(tries||!L.ch[c])&&c!==start&&c!==ex&&L.st[c]<0&&!L.closet[c]&&!L.orbs.includes(c)&&can(c,0))cand.push(c);
+    const c=far(cand);if(c<0){tries++;continue;}L.orbs.push(c);L.orbW.push(0);dm.push(bfsDist(L,c));k++;}
   L.flips=exA<0?exB:exB<0?exA:Math.min(exA,exB);L.ok=L.flips>=cfg.minFlips;L.pathLen=Lp;
   return L;
 }
@@ -381,7 +387,7 @@ function buildGeometry(L,seed){
     else if(tp===6){const y1=DOOR_H;
       lbox(a-0.1,a,0,y1+0.1,-0.11,0.11,1);lbox(b,b+0.1,0,y1+0.1,-0.11,0.11,1);lbox(a,b,y1,y1+0.1,-0.11,0.11,1);
       lbox(a,b,-0.01,0.02,-0.09,0.09,2,1);
-      const inner=c===0?1:-1,no=L.orbs.length;
+      const inner=c===0?1:-1,no=L.need||L.orbs.length;
       for(let i=0;i<no;i++){const s=mid+(i-(no-1)/2)*0.26;lbox(s-0.085,s+0.085,2.465,2.635,inner>0?h:-h-0.03,inner>0?h+0.03:-h,1);}
     }
     if(tp===1&&vr===4){ // doors of every size: standing, hanging head-down from the ceiling, or opening onto nothing halfway up
@@ -629,7 +635,7 @@ function loadLevel(li,seed){
   else{D.ax='z';D.c=(d===3?x:x+1)*CELL;D.mid=(y+0.5)*CELL;D.hx=D.c;D.hz=D.mid-DOOR_W/2;D.th0=-PI/2;}
   const th=D.th0+PI/2;D.sgn=(Math.cos(th)*D.out[0]-Math.sin(th)*D.out[1])>0?1:-1;G.D=D;
   // one socket above the red door for every planet in the chamber
-  const inner=D.c===0?1:-1,n=G.orbs.length;G.sockets=[];
+  const inner=D.c===0?1:-1,n=lvl.need||G.orbs.length;G.sockets=[];   // only as many sockets as the door wants
   for(let i=0;i<n;i++){const s=D.mid+(i-(n-1)/2)*0.26,dd=D.c+inner*(T/2+0.075);G.sockets.push(D.ax==='x'?[s,2.55,dd]:[dd,2.55,s]);}
   bakeLight();
 }
@@ -749,7 +755,7 @@ function drawWorld(w,pass,C,VP,fovy,asp,time){
   for(const d of G.mdoors){gl.uniformMatrix4fv(m.u.uModel,false,modelRY(d.hx,d.y0,d.hz,d.th0+d.sgn*ease(d.open)*1.75));gl.drawArrays(gl.TRIANGLES,R.mdStart,R.mdCount);}
   for(const o of G.orbs){
     if(o.got){ // a gathered planet settles into its socket over the door
-      const s=G.sockets[o.slot],k=ease(o.t);if(k<1&&o.w!==w)continue;
+      const s=G.sockets[o.slot]||G.sockets[G.sockets.length-1],k=ease(o.t);if(k<1&&o.w!==w)continue;if(!G.sockets[o.slot]&&k>=1)continue; // a spare beyond the sockets flies to the last one and is gone
       gl.uniform1f(m.u.uSeed,o.seed);gl.uniformMatrix4fv(m.u.uModel,false,modelOrb(o.x+(s[0]-o.x)*k,WH/2+(s[1]-WH/2)*k,o.z+(s[2]-o.z)*k,time*0.45+o.ph,0.34+(0.062-0.34)*k));
     }else{
       if(o.w!==w)continue;
@@ -836,7 +842,7 @@ function target(){ // what E would act on right now: a planet in reach, then the
   {const a=moonAim();if(a)return {t:'moon',a,can:true};}
   for(const o of G.orbs){if(o.got||o.w!==P.w)continue;if(Math.hypot(o.x-P.x,o.z-P.z)<1.15)return {t:'orb',o,can:true};}
   if(!G.doorOpen&&curCell()===lvl.exit){const D=G.D,dOut=((D.ax==='x'?P.z:P.x)-D.c)*(D.out[0]+D.out[1]);
-    if(dOut>-1.25){const q={t:'door',can:P.g>0&&!sm&&G.orbs.every(o=>o.got)};if(q.can)return q;no=q;}}
+    if(dOut>-1.25){const q={t:'door',can:P.g>0&&!sm&&G.got>=(lvl.need||G.orbs.length)};if(q.can)return q;no=q;}}
   for(const d of G.mdoors){if(d.opened||d.layer!==layer)continue;const r=Math.hypot(d.px-P.x,d.pz-P.z);
     if(r<(sm?0.8:1.25)){if(sm)return {t:'md',d,can:true};no=no||{t:'md',d,can:false};}}
   return no;
