@@ -40,7 +40,7 @@
   const CSS = `#gmenu{position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.35)}
 #gmenu[hidden]{display:none}
 #gmenu .book{position:relative;width:min(480px,86vw);max-height:92vh;overflow:auto;box-sizing:border-box;transform:rotate(-2deg);padding:52px 30px 20px;border-radius:10px;
-  background:#fff8dc;color:#35424a;font:22px/1.35 'Gochi Hand','Comic Sans MS','Segoe Print',cursive;box-shadow:0 18px 60px rgba(0,0,0,.55),inset 0 0 0 6px #ffd84a;text-wrap:pretty}
+  background:#fff8dc;color:#35424a;font:21px/1.35 'Gochi Hand','Comic Sans MS','Segoe Print',cursive;box-shadow:0 18px 60px rgba(0,0,0,.55),inset 0 0 0 6px #ffd84a;text-wrap:pretty}
 #gmenu .top{position:absolute;left:18px;right:18px;top:14px;display:flex;justify-content:space-between;gap:10px}
 #gmenu .top button{font:inherit;font-size:18px;line-height:1.1;padding:4px 12px 5px;border:0;border-radius:9px;cursor:pointer;background:#ffe9a8;color:#5a4318;box-shadow:0 3px 0 #d8b24a}
 #gmenu .top button:hover{background:#ffdf86}#gmenu .top button.armed{background:#e0692a;color:#fff;box-shadow:0 3px 0 #9b3a12}
@@ -62,6 +62,10 @@
   function build() {
     if (root) return;
     const s = document.createElement('style'); s.textContent = CSS; document.head.appendChild(s);
+    // the book's handwriting (Gochi Hand), fetched here too for pages that do not already load it (bounce.html)
+    if (![...document.querySelectorAll('link[href*="fonts.googleapis.com"]')].some((l) => l.href.includes('Gochi'))) {
+      const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'https://fonts.googleapis.com/css2?family=Gochi+Hand&display=swap'; document.head.appendChild(l);
+    }
     root = document.createElement('div'); root.id = 'gmenu'; root.hidden = true;
     root.innerHTML = '<div class="book" role="dialog" aria-label="Instruction book"><div class="top"><button id="gmMain">&larr; Main menu</button><button id="gmSet">Settings &#9881;</button></div><div id="gmBody"></div></div>';
     document.body.appendChild(root);
