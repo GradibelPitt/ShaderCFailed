@@ -1,24 +1,57 @@
-// One save for the whole game. Every page loads this first (a plain script, before the game's own), so window.SCF_SAVE is there for all of them.
-// It lives in localStorage under one key, not in cookies, and keeps only what has to carry over from one scene or one visit to the next.
-// No manual saving or loading yet: that will come later as part of the wall in the level-select hall, as numbered slots built on this.
-//   small      true while the player is shrunk (shrinking happens on the little stairs in the checkerboard rooms; every scene starts the player at this size)
+// Saves. Every page loads this first (a plain script, before the game's own), so window.SCF_SAVE is there for all of them.
+// Everything lives in localStorage under one key (not cookies): any number of save slots, and which one is being played.
+// The main menu (index.html) makes a new slot (New Game, existing ones are kept), picks the latest (Continue) or one from the list (Load Game).
+// A game page opened directly, without the menu, plays the slot last chosen, or the latest one, or makes a first one if there are none.
+// What a slot keeps:
+//   scene      where to pick up: 'playroom' | 'level1' | 'level2' | 'hub' (each scene writes it when it starts)
+//   li         which checkerboard maze (0 = the first) when scene is 'level1'
+//   small      true while the player is shrunk (little stairs in the checkerboard rooms, or the size gun); every scene starts the player at this size
 //   moons      how many moons have been picked up in the checkerboard rooms, all visits together
 //   skyMoons   how many times the big moon has been pulled out of the sky
 //   grate      true once the round mesh door low on the pool's deep-end wall has been opened (it stays open)
 //   gun        true once the size gun (伸缩枪) at the end of the flooded passages behind the pool has been found (js/sizegun.js: Z smaller, X bigger)
 'use strict';
 (function () {
-  const KEY = 'scf.save.v1';
-  const DEFAULTS = { v: 1, small: false, moons: 0, skyMoons: 0, gun: false, grate: false };
-  let d = null;
-  try { d = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { d = null; }
-  d = Object.assign({}, DEFAULTS, d && d.v === 1 ? d : {});
-  function write() { d.t = Date.now(); try { localStorage.setItem(KEY, JSON.stringify(d)); } catch (e) { /* private mode: the save lasts as long as the page */ } }
+  const KEY = 'scf.saves.v2', OLD = 'scf.save.v1';
+  const FRESH = () => ({ scene: 'playroom', li: 0, small: false, moons: 0, skyMoons: 0, grate: false, gun: false });
+  const PAGES = { playroom: 'playroom.html', level1: 'level1.html', level2: 'level2.html', hub: 'hub.html' };
+  let db = null;
+  function load() {
+    let d = null; try { d = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { d = null; }
+    if (!d || !Array.isArray(d.slots)) d = { v: 2, next: 1, current: null, slots: [] };
+    if (!d.slots.length && !d.migrated) {   // the single save from before there were slots becomes Save 1
+      let old = null; try { old = JSON.parse(localStorage.getItem(OLD) || 'null'); } catch (e) { old = null; }
+      d.migrated = true;
+      if (old && old.v === 1) { const data = FRESH(); for (const k of Object.keys(data)) if (k in old) data[k] = old[k]; d.slots.push({ id: d.next++, created: old.t || Date.now(), updated: old.t || Date.now(), data }); d.current = d.slots[0].id; }
+    }
+    db = d; return d;
+  }
+  function write() { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { /* private mode: the save lasts as long as the page */ } }
+  const latest = () => db.slots.slice().sort((a, b) => b.updated - a.updated)[0] || null;
+  function make() { const s = { id: db.next++, created: Date.now(), updated: Date.now(), data: FRESH() }; db.slots.push(s); db.current = s.id; write(); return s; }
+  function cur() {   // the slot being played (made on first use, never just by opening the menu)
+    load(); let s = db.slots.find((x) => x.id === db.current) || latest();
+    if (!s) s = make(); else if (db.current !== s.id) { db.current = s.id; write(); }
+    return s;
+  }
+  const copy = (o) => JSON.parse(JSON.stringify(o));
+  // The main menu (index.html) runs the game's engine for its background, and the engine writes as it starts up (scene, size...).
+  // There, nothing is written and nothing is made: the slot calls see defaults, and only the menu's own calls (newGame, select) touch the saves.
+  const MENU = document.documentElement.dataset.level === 'menu';
+  load();
   window.SCF_SAVE = {
-    get: (k) => d[k],
-    set(k, v) { if (d[k] === v) return; d[k] = v; write(); },
-    add(k, n = 1) { d[k] = (d[k] || 0) + n; write(); },
-    all: () => JSON.parse(JSON.stringify(d)),
-    reset() { d = Object.assign({}, DEFAULTS); write(); },
+    // the slot being played
+    get: (k) => { if (MENU) return FRESH()[k]; const s = cur(); return k in s.data ? s.data[k] : FRESH()[k]; },
+    set(k, v) { if (MENU) return; const s = cur(); if (s.data[k] === v) return; s.data[k] = v; s.updated = Date.now(); write(); },
+    add(k, n = 1) { if (MENU) return; const s = cur(); s.data[k] = (s.data[k] || 0) + n; s.updated = Date.now(); write(); },
+    all: () => (MENU ? FRESH() : copy(cur().data)),
+    reset() { if (MENU) return; const s = cur(); s.data = FRESH(); s.updated = Date.now(); write(); },
+    // the slots, for the menu (none of these makes a slot except newGame)
+    slots: () => (load(), db.slots.slice().sort((a, b) => b.updated - a.updated).map(copy)),
+    latest: () => (load(), latest() ? copy(latest()) : null),
+    newGame() { load(); return copy(make()); },
+    select(id) { load(); if (!db.slots.some((s) => s.id === id)) return false; db.current = id; write(); return true; },
+    currentId: () => (load(), db.current),
+    pageFor: (slot) => PAGES[(slot && slot.data && slot.data.scene) || 'playroom'] || PAGES.playroom,
   };
 })();

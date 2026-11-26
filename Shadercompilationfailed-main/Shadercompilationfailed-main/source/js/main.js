@@ -8,7 +8,8 @@ function boot(data){
   bindInput();
   restoreMaze(data&&data.v===3?data:null); // scene one is always built: it is where scene two leads back to
   const saved=!!(data&&data.v===3),st=startLevel();
-  if(saved?data.hb:st==='hub')enterHub();else if((data&&data.vd)||(!saved&&st==='2'))enterVoid();
+  if(st==='menu'&&typeof enterMenu==='function')enterMenu(); // the main menu (index.html, js/menu.js)
+  else if(saved?data.hb:st==='hub')enterHub();else if((data&&data.vd)||(!saved&&st==='2'))enterVoid();
   try{canvas.focus({preventScroll:true});}catch(e){}
   requestAnimationFrame(frame);
   const hot=window.claude&&window.claude.hot;

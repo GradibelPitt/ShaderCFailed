@@ -647,6 +647,7 @@ const causticMat = new THREE.ShaderMaterial({
 });
 // What carries over between scenes (js/save.js). Shrunk on the little stairs in the checkerboard rooms, you come here shrunk too.
 const SAVE = window.SCF_SAVE || { get: () => undefined, set() {}, add() {} };
+SAVE.set('scene', 'playroom');   // Continue on the main menu brings you back here
 let small = !!SAVE.get('small');   // changes with the size gun (window.__sizeGunScene below)
 // Behind the pool: a round mesh door hanging open low on the deep-end wall, and behind it a pipe and a small flooded maze under the deck.
 // The way in is a circle GR.r across: someone your usual size (taller than it is wide) does not fit; shrunk, you swim straight in.

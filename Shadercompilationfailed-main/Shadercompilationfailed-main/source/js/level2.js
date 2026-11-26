@@ -113,6 +113,7 @@ function answer(i){if(G.mode!=='void'||Qs.i<0||Qs.pick>=0)return;if(G.clock-Qs.t
 function qUpdate(){if(Qs.i<0)return;Qs.tick=Math.floor(G.clock*11);qShow(false);if(Qs.pick>=0&&G.clock-Qs.pt>Q_PICK)qNext();}
 function endVoid(){$('q').hidden=true;canvas.style.cursor='';Qs.i=-1;G.mode='end';G.endT=0;}
 function enterVoid(){
+  SCF_SAVE.set('scene','level2');
   if(!VD)VD=buildVoid();
   G.mode='void';G.climb=false;flip=null;xing=null;keys.clear();say('');
   G.fade=0;G.flashA=0;G.shock=0;G.pix=0;G.dark=0;G.hold=0;G.fovAdd=0;G.hint=0;

@@ -605,7 +605,7 @@ function toLadder(u){
 }
 function toStart(){const W=lvl.W,c=lvl.start;P.x=(c%W+0.5)*CELL;P.z=(((c/W)|0)+0.5)*CELL;P.g=1;P.w=0;P.small=!!SCF_SAVE.get('small');P.size=P.small?0.28:1;P.jy=0;P.vy=0;P.vx=P.vz=0;P.pitch=0;}
 function loadLevel(li,seed){
-  const cfg=cfgFor(li);G.li=li;
+  const cfg=cfgFor(li);G.li=li;SCF_SAVE.set('scene','level1');SCF_SAVE.set('li',li); // Continue picks up at the start of this maze
   G.seed=seed!=null?seed:(cfg.seed!=null?cfg.seed:((Math.random()*90000)|0)+1000);
   G.mood=MOODS[li%MOODS.length];
   lvl=generate(cfg,G.seed);
@@ -1152,7 +1152,7 @@ function tickMaze(dt){
 function snapshotMaze(){return {li:G.li,seed:G.seed,got:G.orbs.map(o=>o.got?o.slot:-1),md:G.mdoors.map(d=>d.opened),door:G.doorOpen,told:G.told,
   x:G.climb&&G.M?G.M.cx:P.x,z:G.climb&&G.M?G.M.cz:P.z,yaw:P.yaw,pitch:P.pitch,g:P.g,w:P.w,small:P.small};}
 function restoreMaze(data){
-  if(!(data&&data.li!=null)){loadLevel(0);return;}
+  if(!(data&&data.li!=null)){loadLevel(SCF_SAVE.get('li')||0);return;}
   loadLevel(data.li,data.seed);
   (data.got||[]).forEach((slot,i)=>{if(slot>=0&&G.orbs[i]){G.orbs[i].got=true;G.orbs[i].t=1;G.orbs[i].slot=slot;G.got++;}});
   (data.md||[]).forEach((o,i)=>{if(o&&G.mdoors[i]){G.mdoors[i].opened=true;G.mdoors[i].open=1;}});

@@ -166,7 +166,7 @@ function hubRow(pt){
   return -1;
 }
 function hubClick(pt){
-  if(G.mode!=='hub'||HB.pick>=0||HB.title>=0||G.fade>0.5)return;
+  if(G.mode!=='hub'||HB.menu||HB.pick>=0||HB.title>=0||G.fade>0.5)return;
   const i=hubRow(pt);if(i<0)return;
   HB.pick=i;HB.pt=0;HB.gone=false;HB.blink=0;HB.dirty=true;keys.clear();G.jb=0;
   Snd.tone(660,0.09,'square',0.035,0,true);Snd.tone(990,0.16,'square',0.03,0.08,true);
@@ -270,6 +270,7 @@ function ttlOff(){HB.title=-1;if(TT.cv)TT.cv.hidden=true;}
 function ttlFirst(){try{if(sessionStorage.getItem('scf.title'))return false;sessionStorage.setItem('scf.title','1');}catch(e){if(TT.seen)return false;}TT.seen=true;return true;}
 /* ---------- arriving, being there, leaving ---------- */
 function enterHub(){
+  SCF_SAVE.set('scene','hub');
   if(!HB.prog)hubInit();
   G.mode='hub';G.climb=false;flip=null;xing=null;keys.clear();say('');
   Qs.i=-1;$('q').hidden=true;canvas.style.cursor='';HB.cur='';
@@ -281,6 +282,7 @@ function enterHub(){
 function updateHub(dt){
   // no bells, no chord: only the wind
   if(Snd.ctx&&!HB.wind&&!HB.gone&&HB.title<0){Snd.mute=true;const t=Snd.ctx.currentTime;Snd.droneOff();if(Snd.pad)Snd.pad.gain.setTargetAtTime(0,t,0.05);Snd.master.gain.setTargetAtTime(0.9,t,0.4);windOn();}
+  if(HB.menu){P.yaw-=dt*0.022;P.pitch=0.05;return;} // the main menu: no walking, the view turns slowly over the grass (js/menu.js)
   const busy=HB.pick>=0; // a line has been chosen: you stand where you are until it takes you
   const crouch=!busy&&(keys.has('KeyC')||G.tCrouch);P.cr+=((crouch?1:0)-P.cr)*(1-Math.exp(-dt*14));
   let turn=busy?0:(keys.has('ArrowRight')||(!locked&&keys.has('KeyD'))?1:0)-(keys.has('ArrowLeft')||(!locked&&keys.has('KeyA'))?1:0);if(!busy&&joy.id>=0)turn+=joy.x*0.9;
