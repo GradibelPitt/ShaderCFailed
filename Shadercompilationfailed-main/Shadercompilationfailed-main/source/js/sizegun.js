@@ -1,12 +1,15 @@
 // The size gun (伸缩枪): found at the end of the flooded passages behind the pool's round grate (js/playroom.js).
-// Once you have it (SCF_SAVE gun), it goes with you everywhere: Z makes you smaller, X makes you bigger.
+// Once you have it (SCF_SAVE gun), it goes with you everywhere: left click makes you smaller, right click makes you bigger.
 // turnSmall() does nothing if you are already small, turnBig() nothing if you are already big (or there is no room to grow);
-// both return whether they worked. The size itself is SCF_SAVE small, the same one the little stairs in the checkerboard rooms change.
+// both return whether they worked. It is one of the things you carry (js/equip.js): the clicks work only while it is the one in your hand
+// (and only once the mouse is locked to the game, so the first click still just takes the mouse); in your hand, the clicks are the gun's alone.
+// and this little card only shows then. The size itself is SCF_SAVE small, the same one the little stairs in the checkerboard rooms change.
 // Each scene says whether a change is allowed right now and carries it out, through window.__sizeGunScene = { can(toSmall), apply(toSmall) }.
 'use strict';
 (function () {
   const S = () => window.SCF_SAVE;
   const has = () => !!(S() && S().get('gun'));
+  const inHand = () => has() && (!window.Equip || window.Equip.sel() === 'gun');
   const isSmall = () => !!(S() && S().get('small'));
   let ac = null;
   function beep(ok, toSmall) {
@@ -38,19 +41,19 @@
       + '<path d="M40 11 L50 7 L50 27 L40 23 Z" fill="#d993c2" stroke="#7d3f68" stroke-width="1.5"/>'
       + '<circle class="ring" cx="52" cy="17" r="5" fill="none" stroke="#7fffd4" stroke-width="2" style="transform-origin:52px 17px;opacity:0"/>'
       + '<circle cx="51" cy="17" r="2.6" fill="#7fffd4"/></svg>'
-      + '<div class="rows"><span class="s"><kbd>Z</kbd> smaller</span><span class="b"><kbd>X</kbd> bigger</span></div>';
+      + '<div class="rows"><span class="s"><kbd>L</kbd> click: smaller</span><span class="b"><kbd>R</kbd> click: bigger</span></div>';
     document.body.appendChild(hud);
     const fl = document.createElement('div'); fl.id = 'sizeflash'; document.body.appendChild(fl);
   }
   function refresh() {
-    build(); if (!hud) return;
-    hud.hidden = !has();
+    build(); if (window.Equip && !refresh.inner) { refresh.inner = true; try { window.Equip.refresh(); } catch (e) {} refresh.inner = false; } if (!hud) return;
+    hud.hidden = !inHand();
     hud.querySelector('.s').classList.toggle('off', isSmall());
     hud.querySelector('.b').classList.toggle('off', !isSmall());
   }
   function kick(cls) { if (!hud) return; hud.classList.remove(cls); void hud.offsetWidth; hud.classList.add(cls); }
   function change(toSmall) {
-    if (!has()) return false;
+    if (!inHand()) return false;
     const sc = window.__sizeGunScene;
     if (isSmall() === toSmall || !sc || !sc.can(toSmall)) { beep(false); kick('no'); return false; }
     sc.apply(toSmall); S().set('small', toSmall); beep(true, toSmall); kick('zap');
@@ -60,9 +63,12 @@
   const turnSmall = () => change(true);   // already small: false
   const turnBig = () => change(false);    // already big: false
   window.SizeGun = { turnSmall, turnBig, refresh, has, isSmall };
-  addEventListener('keydown', (e) => {
-    if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
-    if (e.code === 'KeyZ') turnSmall(); else if (e.code === 'KeyX') turnBig();
-  });
+  // in your hand: left click smaller, right click bigger. Caught on the way down (capture), before any scene's own click (throwing, picking).
+  addEventListener('mousedown', (e) => {
+    if (!inHand() || !document.pointerLockElement || (e.button !== 0 && e.button !== 2)) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (e.button === 0) turnSmall(); else turnBig();
+  }, true);
+  addEventListener('contextmenu', (e) => { if (inHand()) e.preventDefault(); }, true);
   if (document.readyState === 'loading') addEventListener('DOMContentLoaded', refresh); else refresh();
 })();

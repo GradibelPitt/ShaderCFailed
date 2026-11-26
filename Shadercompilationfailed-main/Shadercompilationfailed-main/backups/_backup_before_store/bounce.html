@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-bounce="solo">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>棋格幻境 · 充气城堡 Bounce House</title>
+<!-- The bounce house on its own, for working on it. In the game it lives inside the level pages: js/poolflip.js loads js/bounce.js
+     and the ENTER holes of the inverted pool lead into it without a page change. Here its two crawl tubes lead into each other. -->
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden}
+  #bc{position:fixed;inset:0;width:100%;height:100%;display:none;outline:none;cursor:pointer;background:#000}
+  #dot{position:fixed;left:50%;top:50%;width:4px;height:4px;margin:-2px 0 0 -2px;border-radius:50%;background:rgba(255,246,220,.38);pointer-events:none}
+  #err{position:fixed;left:12px;bottom:12px;max-width:80vw;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;color:#f99;white-space:pre-wrap;display:none}
+</style>
+<script type="importmap">
+{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+  "three-mesh-bvh":"https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.7/build/index.module.js"
+}}
+</script>
+</head>
+<body>
+<canvas id="bc" tabindex="0"></canvas>
+<div id="dot"></div>
+<div id="err"></div>
+<script>
+  window.__showErr = function (m) { var e = document.getElementById('err'); e.style.display = 'block'; e.textContent += String(m) + '\n'; };
+  window.addEventListener('error', function (e) { window.__showErr(e.message || (e.target && e.target.src) || 'error'); }, true);
+  window.addEventListener('unhandledrejection', function (e) { window.__showErr(e.reason && e.reason.message || e.reason); });
+</script>
+<script src="js/save.js"></script>
+<script src="js/gmenu.js"></script>
+<script src="js/sizegun.js"></script>
+<script type="module" src="js/bounce.js"></script>
+</body>
+</html>

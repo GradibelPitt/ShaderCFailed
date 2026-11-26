@@ -1,11 +1,13 @@
 // The back of the white screen: an old beige computer stands in the grass against it, its screen dark.
 // Walk round behind the screen and up to it, press E: there is no power, it will not turn on.
+// With the power strip from the store in your hand (js/equip.js), E plugs it in and the computer starts (SCF_SAVE pcPower: it stays on).
 // It is not drawn by the hub's shader: it is a small CSS 3D model (built from hand-made boxes) laid over the picture and moved with the camera every frame,
 // shown only while the screen is not standing between you and it.
 'use strict';
 const PC_S=0.0045,PC_POS=[0,130*0.0045,-1.11];   // metres per model pixel; where the model's origin stands (it faces -z, away from the screen's back)
 const PC_BOX={x0:-0.62,x1:0.62,z0:-2.0,z1:-ST};  // its footprint, for walking into it
 const PC_MSG='No power supply. The computer won\'t turn on.',PC_ASK='Press E to use the computer';
+const PC_PLUG='You plug the power strip in. The computer starts.',PC_HUM='The computer hums. The screen shows a field you know.',PC_SCROLL='No power supply. (Scroll to the power strip.)';
 // the model's top-level parts: centre and size in model pixels (y down, +z out of the front), for hiding a part once any of it is behind your eye
 const PC_PARTS={'desk-shadow':[0,132,20,390,0,390],'case-contact-shadow':[0,130,-10,274,0,224],'kb-contact-shadow':[0,130,152,238,0,90],
   'foot-fl':[-108,127,74,24,5,24],'foot-fr':[108,127,74,24,5,24],'foot-bl':[-108,127,-94,24,5,24],'foot-br':[108,127,-94,24,5,24],
@@ -29,10 +31,28 @@ function pcCollide(ox,oz,nx,nz){
   const m=0.3,inB=(x,z)=>x>PC_BOX.x0-m&&x<PC_BOX.x1+m&&z>PC_BOX.z0-m&&z<PC_BOX.z1+m;
   if(!inB(nx,nz))return [nx,nz];if(!inB(nx,oz))return [nx,oz];if(!inB(ox,nz))return [ox,nz];return [ox,oz];
 }
+// the screen when it is on: a few lines of start-up text, then a desktop that is this same green hill and sky
+function pcBoot(instant){
+  PC.el.classList.add('on');const sc=PC.el.querySelector('.crt-screen');if(!sc||sc.querySelector('.pc-boot'))return;
+  if(!document.getElementById('hubpc-on')){const st=document.createElement('style');st.id='hubpc-on';st.textContent=
+    "#hubpc.on .led-dot.pwr{background:#5fe36a;box-shadow:0 0 5px #5fe36a}#hubpc.on .led-dot.hdd{animation:pc_hdd 1.3s steps(2) 3}@keyframes pc_hdd{50%{background:#ffb02e;box-shadow:0 0 4px #ffb02e}}"
+    +"#hubpc .pc-boot,#hubpc .pc-desk{position:absolute;inset:0;font:7px/1.25 'Lucida Console',Consolas,monospace;color:#c8c8c8;padding:6px 7px;background:#000}"
+    +"#hubpc .pc-boot div{opacity:0;animation:pc_l .01s forwards}@keyframes pc_l{to{opacity:1}}"
+    +"#hubpc .pc-desk{padding:0;opacity:0;animation:pc_d .6s forwards;background:linear-gradient(#3d79d8 0%,#7fb0ec 45%,#bcd8f2 58%,#5aa73a 59%,#3f8d2a 78%,#2f6e1e 100%)}"
+    +"#hubpc .pc-desk .bar{position:absolute;left:0;right:0;bottom:0;height:9px;background:linear-gradient(#3a6fd8,#2552b8)}#hubpc .pc-desk .bar i{position:absolute;left:0;top:0;bottom:0;width:26px;background:linear-gradient(#4bb048,#2e8a2c);border-radius:0 5px 5px 0}"
+    +"#hubpc .pc-desk .cl{position:absolute;left:50%;top:44%;width:30px;height:9px;border-radius:9px;background:rgba(255,255,255,.85);box-shadow:16px -5px 0 -1px rgba(255,255,255,.75)}"
+    +"@keyframes pc_d{to{opacity:1}}";document.head.appendChild(st);}
+  const L=['PhoenixBIOS 4.0 Release 6.0','Memory Test: 65536K OK','','Detecting IDE drives ...','  Primary Master: WDC AC31000H','','Starting Windows ...'];
+  const boot=document.createElement('div');boot.className='pc-boot';boot.innerHTML=L.map((t,i)=>'<div style="animation-delay:'+(instant?0:0.25+i*0.42).toFixed(2)+'s">'+(t||'&nbsp;')+'</div>').join('');sc.appendChild(boot);
+  const desk=document.createElement('div');desk.className='pc-desk';desk.style.animationDelay=(instant?0:4.2)+'s';desk.innerHTML='<i class="cl"></i><div class="bar"><i></i></div>';sc.appendChild(desk);
+}
+if(window.SCF_SAVE&&SCF_SAVE.get('pcPower'))pcBoot(true);
 function pcUse(){
   if(!PC.near)return false;
-  PC.msgT=3.2;pcSay(PC_MSG);try{Snd.thud();}catch(e){}
-  const b=PC.el.querySelector('.power-btn-3d');if(b){b.classList.add('pressed');setTimeout(()=>b.classList.remove('pressed'),160);}
+  const E=window.Equip,b=PC.el.querySelector('.power-btn-3d');if(b){b.classList.add('pressed');setTimeout(()=>b.classList.remove('pressed'),160);}
+  if(window.SCF_SAVE&&SCF_SAVE.get('pcPower')){pcBoot(true);PC.msgT=3.2;pcSay(PC_HUM);return true;}
+  if(E&&E.sel()==='socket'){E.remove('socket');SCF_SAVE.set('pcPower',true);pcBoot(false);PC.msgT=4.5;pcSay(PC_PLUG);try{Snd.thud();}catch(e){}return true;}
+  PC.msgT=3.2;pcSay(E&&E.has('socket')?PC_SCROLL:PC_MSG);try{Snd.thud();}catch(e){}
   return true;
 }
 window.addEventListener('keydown',e=>{if(G.mode==='hub'&&e.code==='KeyE'&&!e.repeat)pcUse();});

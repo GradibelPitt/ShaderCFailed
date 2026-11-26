@@ -1,7 +1,7 @@
 // The bounce house. An empty inflatable castle, blower still running, nobody in it.
-// It is where the ENTER hole beside the inverted pool leads: walk into that tunnel, and somewhere in the dark the tunnel becomes
-// a vinyl crawl tube that opens into the first room. The other ENTER hole (the one on the back wall, by the first slide) is the
-// far end of the same castle. There is no page change: js/poolflip.js imports this module in the background, everything is built
+// It is where the ENTER hole straight ahead in the inverted pool (the back wall, by the first slide) leads: walk into that tunnel,
+// and somewhere in the dark the tunnel becomes a vinyl crawl tube that opens into the first room. Its other crawl tube, at the far
+// end, comes back out of that same hole. There is no page change: js/poolflip.js imports this module in the background, everything is built
 // and lit while the player is still in the pool, and window.__bounceStart() (called in the pitch black of the tunnel) shows this
 // canvas and starts the loop. Walk back out through either tube and window.__bounceReturn() hands the player back to the pool.
 // bounce.html runs the same module on its own (there the two tubes simply lead into each other).
@@ -224,10 +224,10 @@ function ball(x, y, z, r, col) {
 }
 
 // The inflatable rocket: a body turned on a lathe and sewn from eight gores, a red nose, four fins, portholes, standing on a ring.
-// It is in the far dead-end room and does nothing yet; window.__bounce.rocket says where it is, for whatever comes later.
-const rocket = { x: 0, z: 0, r: 0.26, y0: 0.22, y1: 1.56 };
+// It stands in a room of its own. With the air pump in your hand, E on it pumps it up and you carry it off (SCF_SAVE rocketTaken).
+const rocket = { x: 0, z: 0, r: 0.26, y0: 0.22, y1: 1.56, v0: 0, v1: 0, s0: 0, s1: 0, gone: false };
 function buildRocket(cx, cz) {
-  rocket.x = cx; rocket.z = cz;
+  rocket.x = cx; rocket.z = cz; rocket.v0 = nv; rocket.s0 = solids.length;
   const prof = [[0.1, 0.22], [0.16, 0.26], [0.205, 0.33], [0.24, 0.43], [0.257, 0.56], [0.26, 0.7], [0.255, 0.84], [0.24, 0.96], [0.215, 1.07], [0.18, 1.18], [0.18, 1.18], [0.15, 1.27], [0.115, 1.36], [0.078, 1.44], [0.042, 1.51], [0.006, 1.56]];
   const rs = 40, base = nv; rough = 0.3;
   for (let j = 0; j < prof.length; j++) {
@@ -258,6 +258,7 @@ function buildRocket(cx, cz) {
   rough = 0.4;
   solid(cx - 0.24, cx + 0.24, cz - 0.24, cz + 0.24, 0, 99);
   for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) solid(cx + dx * 0.6 - 0.14 - Math.abs(dz) * 0.4, cx + dx * 0.6 + 0.14 + Math.abs(dz) * 0.4, cz + dz * 0.6 - 0.14 - Math.abs(dx) * 0.4, cz + dz * 0.6 + 0.14 + Math.abs(dx) * 0.4, 0, 0.2);
+  rocket.v1 = nv; rocket.s1 = solids.length;
 }
 
 /* ------------------------------------------------------------------ */
@@ -772,6 +773,7 @@ addEventListener('keydown', (e) => {
   if (!on) { if (!e.repeat) keys[e.code] = true; return; }
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.code)) e.preventDefault();
   if (e.repeat) return; keys[e.code] = true; initAudio();
+  if (e.code === 'KeyE') useE();
   if (e.code === 'KeyC') { cDownAt = performance.now(); if (player.crouch) { player.crouch = false; cToggledOn = false; } else { player.crouch = true; cToggledOn = true; } }
 });
 addEventListener('keyup', (e) => { keys[e.code] = false; if (e.code === 'KeyC' && cToggledOn && performance.now() - cDownAt > 380) { player.crouch = false; cToggledOn = false; } });
@@ -804,7 +806,7 @@ function leaveBy(i) {
   if (SOLO || !window.__bounceReturn) {   // nothing outside: the far end of one tube is the far end of the other
     st.port = 1 - i; st.d = Math.max(0, -d); st.vs = -st.vs; st.vu = -st.vu; st.u = -u; st.yaw += Math.PI; fromPort(st); inflate(); entry = st.port; return;
   }
-  on = false; inflate(); st.held = Object.keys(keys).filter((k) => keys[k]); for (const k in keys) keys[k] = false;
+  on = false; inflate(); if (EQ()) EQ().prompt(null); st.held = Object.keys(keys).filter((k) => keys[k]); for (const k in keys) keys[k] = false;
   try { if (AC && AC.state === 'running') AC.suspend(); } catch (e) {}
   canvas.style.display = 'none';
   window.__bounceReturn(st);
@@ -844,7 +846,7 @@ function updateAir(dt) {
   if (fail < 0) {
     inside += dt;
     const mid = COLS * CELL / 2, past = entry === 0 ? p.x < mid - 0.5 : p.x > mid + 0.5;
-    if (past && inside > 6 && p.x > 0 && p.x < COLS * CELL) powerCut();
+    if (past && inside > 6 && p.x > 0 && p.x < COLS * CELL && !SV().get('castleFixed')) powerCut();
     return 0;
   }
   fail += dt;
@@ -861,7 +863,7 @@ function updateAir(dt) {
   return sstep(FAIL_END - 1.5, FAIL_END + 0.4, fail);   // how black the picture is
 }
 window.__bounceStart = (st) => {
-  if (on || !ready) return false; on = true; inflate(); entry = st && st.port === 1 ? 1 : 0;
+  if (on || !ready) return false; on = true; inflate(); entry = st && st.port === 1 ? 1 : 0; if (SV().get('rocketTaken')) hideRocket();
   for (const k in keys) keys[k] = false; for (const c of (st && st.held) || []) keys[c] = true;
   fromPort(st || { port: 0, d: 1.6 }); last = -1; resize();
   canvas.style.display = 'block'; grade.uniforms.uFade.value = 1;
@@ -885,6 +887,7 @@ function updateGlints(dt) {
   for (const gl of glints) { gl.k += ((gl.want ? 1 : 0) - gl.k) * Math.min(1, dt * 4); gl.l.intensity = gl.lamp ? gl.k * gl.lamp.I * 5.5 * U.uDim.value * U.uDim.value : 0; }
 }
 let dark = 0;
+const _rp = new THREE.Vector3();
 // one step of the world. Returns how far the player is past a tube's hand-over point (99: not in a tube).
 function tick(dt) {
   if (keys.ArrowLeft) player.yaw += 1.8 * dt; if (keys.ArrowRight) player.yaw -= 1.8 * dt;
@@ -903,6 +906,7 @@ function frame(now) {
   const d = tick(dt); if (!on) return;
   placeCamera(dt);
   updateGlints(dt);
+  if (EQ()) { if (rocketAimed()) { _rp.set(rocket.x, clamp(camera.position.y + 0.15, 0.5, 1.2), rocket.z).project(camera); EQ().prompt((_rp.x * 0.5 + 0.5) * innerWidth, (-_rp.y * 0.5 + 0.5) * innerHeight); } else EQ().prompt(null); }
   U.uTime.value = time; grade.uniforms.uTime.value = time;
   grade.uniforms.uFade.value = Math.max(dark, 1 - sstep(0.1, 1.5, d));   // black at the hand-over point, the room's own light by a metre and a half in
   if (AC && acOut) acOut.gain.value += (sstep(-0.5, 4.5, d) * 0.9 - acOut.gain.value) * Math.min(1, dt * 6);
@@ -912,6 +916,44 @@ function frame(now) {
 /* ------------------------------------------------------------------ */
 /* get ready                                                           */
 /* ------------------------------------------------------------------ */
+// carried off: its part of the mesh folds away to nothing under the floor, and its boxes stop being in the way
+function hideRocket() {
+  if (rocket.gone) return; rocket.gone = true;
+  for (let v = rocket.v0; v < rocket.v1; v++) { posA[v * 3] = rocket.x; posA[v * 3 + 1] = -3; posA[v * 3 + 2] = rocket.z; }
+  geo.attributes.position.needsUpdate = true; try { bvh.refit(); } catch (e) {}
+  for (let i = rocket.s0; i < rocket.s1; i++) { solids[i].y1 = -1; solids[i].y0 = -2; }
+}
+const SV = () => window.SCF_SAVE || { get: () => undefined, set() {} };
+const EQ = () => window.Equip;
+// E: the rocket if you are looking at it, otherwise the pump (if it is in your hand) on the castle itself
+function rocketAimed() {
+  if (rocket.gone) return false; const c = camera.position; camera.getWorldDirection(_rd);
+  const dx = rocket.x - c.x, dz = rocket.z - c.z, dh = Math.hypot(dx, dz); if (dh > 1.25) return false;
+  const dy = clamp(c.y, rocket.y0, rocket.y1 - 0.2) - c.y, d = Math.hypot(dx, dy, dz) || 1;
+  return (dx * _rd.x + dy * _rd.y + dz * _rd.z) / d > 0.55;
+}
+const _rd = new THREE.Vector3();
+function pumpUp(quiet) {   // the castle is full again and stays full
+  const was = SV().get('castleFixed'); SV().set('castleFixed', true);
+  if (fail >= 0) inflate(); if (!quiet) whoosh();
+  return !was;
+}
+function whoosh() {   // air going in: the pump's strokes
+  if (!AC || AC.state !== 'running') return; const t0 = AC.currentTime;
+  for (let i = 0; i < 4; i++) { const t = t0 + i * 0.32, s = AC.createBufferSource(); s.buffer = acNoise; const bp = AC.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.setValueAtTime(700, t); bp.frequency.linearRampToValueAtTime(1600, t + 0.22); bp.Q.value = 1.2;
+    const g = AC.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.5, t + 0.05); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.26); s.connect(bp); bp.connect(g); g.connect(acOut); s.start(t, Math.random()); s.stop(t + 0.3); }
+}
+function useE() {
+  const E = EQ(), sel = E ? E.sel() : null;
+  if (rocketAimed()) {
+    if (sel === 'pump') { whoosh(); hideRocket(); SV().set('rocketTaken', true); pumpUp(true); if (E) { E.add('rocket'); E.say('You pump the rocket up. It is light enough to carry.', 3.5); } }
+    else if (E && E.has('pump')) E.say('It needs air.  (Scroll to the air pump.)', 3);
+    else if (E) E.say('It needs air.', 2.5);
+    return;
+  }
+  if (sel === 'pump') { const first = pumpUp(false); if (E) E.say(first ? 'You pump air back in. The castle holds.' : 'The castle is full of air.', 3); }
+}
+
 let ready = false;
 window.__bounce = { player, camera, keys, ports, solids, lamps, grade, U, rocket, powerCut, get fail() { return fail; }, set fail(v) { fail = v; }, get progress() { return bakeProgress; }, get on() { return on; }, get verts() { return nv; },
   // put the player somewhere and draw one frame (testing from the console)

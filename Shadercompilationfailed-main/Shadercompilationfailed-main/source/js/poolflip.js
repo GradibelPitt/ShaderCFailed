@@ -8,8 +8,9 @@
 // How it works: every mesh is built exactly as in the playroom, inside one group that is rotated half a turn about the room's
 // mid-height, (x, y, z) -> (-x, H - y, z). The player and the camera live in the turned world (a second, turned collision BVH);
 // the balls keep simulating in the original space against the original BVH.
-// The two ENTER holes lead on, again without a page change, to the bounce house (js/bounce.js, loaded from here in the background):
-// nine metres into either tunnel, in the pitch black, the tunnel is one of the castle's crawl tubes. See toBounce() below.
+// The two ENTER holes lead on, again without a page change (both scenes are loaded from here in the background):
+// the one straight ahead (the back wall, by the first slide) to the bounce house (js/bounce.js), the one on the left (the side wall
+// beside the water) to the store (js/store.js). Nine metres into the tunnel, in the pitch black, it becomes their corridor. See handOver() below.
 import * as THREE from 'three';
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
@@ -910,26 +911,31 @@ function tryEnterTunnel() {
   }
   return false;
 }
-// Which ENTER hole comes out in the bounce house's first room (the one built after the photograph): 1 = the hole in the side wall
-// beside the pool, 0 = the hole in the back wall by the first slide. The other hole is the castle's far end.
-const BOUNCE_FRONT = 1;
-let away = false;   // true while the bounce house has the screen
-// PORTAL_D metres into a tunnel, in the dark: hand the player to the bounce house. Both sides describe someone in a tube the same way:
-// d metres past the hand-over point, u metres to the side, y above the tube floor, heading and speed relative to the way in.
-function toBounce(k, s, u) {
-  const a = TUNF[k], v = player.vel;
-  const st = { port: k === BOUNCE_FRONT ? 0 : 1, d: Math.min(s - PORTAL_D, 0.5), u, y: player.pos.y - TUN_FLOOR_F, yaw: player.yaw - a.yawIn, pitch: player.pitch,
+// Which ENTER hole leads where. 0: the hole straight ahead from the ladder, in the back wall by the first slide; 1: the hole on the
+// left, in the side wall beside the water. The bounce house's two crawl tubes both come back out of hole 0.
+const BOUNCE_HOLE = 0, STORE_HOLE = 1;
+const SCENES = [
+  { hole: BOUNCE_HOLE, start: () => window.__bounceStart, ready: () => window.__bounceReady, failed: () => window.__bounceFailed, size: () => window.__bounceSize },
+  { hole: STORE_HOLE, start: () => window.__storeStart, ready: () => window.__storeReady, failed: () => window.__storeFailed, size: () => window.__storeSize },
+];
+const sceneOf = (k) => SCENES.find((S) => S.hole === k);
+let away = null;   // the scene that has the screen, while one does
+// PORTAL_D metres into a tunnel, in the dark: hand the player over. Both sides describe someone in a tunnel the same way:
+// d metres past the hand-over point, u metres to the side, y above the tunnel floor, heading and speed relative to the way in.
+function handOver(k, s, u) {
+  const S = sceneOf(k), a = TUNF[k], v = player.vel;
+  const st = { port: 0, d: Math.min(s - PORTAL_D, 0.5), u, y: player.pos.y - TUN_FLOOR_F, yaw: player.yaw - a.yawIn, pitch: player.pitch,
     vs: v.x * a.ix + v.z * a.iz, vu: v.x * -a.iz + v.z * a.ix, vy: v.y, h: player.h, crouch: player.crouch, bob: player.bob, small, scale: scaleK, held: Object.keys(keys).filter((c) => keys[c]) };
-  if (!window.__bounceStart(st)) return;
-  away = true; for (const c in keys) keys[c] = false;
+  if (!S.start()(st)) return;
+  away = S; for (const c in keys) keys[c] = false;
   try { if (AC && AC.state === 'running') AC.suspend(); } catch (e) {}
   if (music && music.el) { try { music.el.pause(); } catch (e) {} }
 }
-// Back out of the castle through one of its tubes: the same tunnel again, a little short of the hand-over point, walking toward the hole.
-window.__bounceReturn = (st) => {
-  if (!away) return; away = false;
+// Back out through a corridor: the same tunnel again, a little short of the hand-over point, walking toward the hole.
+function returnTo(k, st) {
+  if (!away) return; away = null;
   small = !!st.small; setScale(st.scale || (small ? 0.42 : 1));   // the size gun may have been used in there
-  const k = st.port === 0 ? BOUNCE_FRONT : 1 - BOUNCE_FRONT, a = TUNF[k], s = PORTAL_D + Math.min(st.d, -0.3), u = clamp(st.u, -0.4, 0.4), p = player.pos;
+  const a = TUNF[k], s = PORTAL_D + Math.min(st.d, -0.3), u = clamp(st.u, -0.4, 0.4), p = player.pos;
   p.set(a.mx + a.ix * s - a.iz * u, TUN_FLOOR_F + Math.max(0, st.y) + 0.005, a.mz + a.iz * s + a.ix * u);
   player.vel.set(a.ix * st.vs - a.iz * st.vu, st.vy, a.iz * st.vs + a.ix * st.vu);
   player.yaw = a.yawIn + st.yaw; player.pitch = st.pitch; player.h = st.h; player.crouch = !!st.crouch; player.bob = st.bob || 0;
@@ -937,12 +943,14 @@ window.__bounceReturn = (st) => {
   for (const c in keys) keys[c] = false; for (const c of st.held || []) keys[c] = true;
   last = -1; initAudio(); if (music && music.el) music.el.play().catch(() => {});
   if (poolOn) requestAnimationFrame(frame);
-};
+}
+window.__bounceReturn = (st) => returnTo(BOUNCE_HOLE, st);   // whichever of its tubes you leave by
+window.__storeReturn = (st) => returnTo(STORE_HOLE, st);
 function portalPlayer() {
   { const p = player.pos, k = tunnelOfF(p.x, p.y, p.z); if (k < 0) return;
     const a = TUNF[k], b = TUNF[1 - k], s = (p.x - a.mx) * a.ix + (p.z - a.mz) * a.iz; if (s < PORTAL_D) return;
-    if (!window.__bounceFailed) { if (window.__bounceReady) toBounce(k, s, (p.x - a.mx) * -a.iz + (p.z - a.mz) * a.ix); return; }   // castle still being built: the tunnel just goes on, dark
-    // (only if the castle could not be loaded at all: the old fold, one tunnel straight into the other)
+    { const S = sceneOf(k); if (!S.failed()) { if (S.ready()) handOver(k, s, (p.x - a.mx) * -a.iz + (p.z - a.mz) * a.ix); return; } }   // still being built: the tunnel just goes on, dark
+    // (only if that scene could not be loaded at all: the old fold, one tunnel straight into the other)
     const u = (p.x - a.mx) * -a.iz + (p.z - a.mz) * a.ix, s2 = Math.max(2 * PORTAL_D - s, PORTAL_D - 0.5);
     p.x = b.mx + b.ix * s2 + b.iz * u; p.z = b.mz + b.iz * s2 - b.ix * u;
     const d = b.yawIn + Math.PI - a.yawIn, c = Math.cos(d), sn = Math.sin(d), v = player.vel, vx = v.x * c + v.z * sn, vz = -v.x * sn + v.z * c;
@@ -1051,7 +1059,7 @@ function roomAt(y, k) {
 }
 window.__poolSize = {
   can(toSmall) {
-    if (away) return !!window.__bounceSize && window.__bounceSize.can(toSmall);   // in the bounce house, the bounce house has the say
+    if (away) return !!away.size() && away.size().can(toSmall);   // in the bounce house or the store, that scene has the say
     if (player.frozen || player.mode !== 'walk' || player.mantle || blink) return false;
     if (toSmall) return true;
     const p = player.pos;
@@ -1062,7 +1070,7 @@ window.__poolSize = {
     }
     p.x = x0; p.z = z0; return false;
   },
-  apply(toSmall) { if (away) { small = toSmall; window.__bounceSize.apply(toSmall); return; } small = toSmall; if (!toSmall && growY !== null) { player.pos.y = growY; player.pos.x = growXZ[0]; player.pos.z = growXZ[1]; } growY = null; },
+  apply(toSmall) { if (away) { small = toSmall; away.size().apply(toSmall); return; } small = toSmall; if (!toSmall && growY !== null) { player.pos.y = growY; player.pos.x = growXZ[0]; player.pos.z = growXZ[1]; } growY = null; },
 };
 const BOOK = new V3(-5.32, 0.13, 5.25), bookEl = document.getElementById('book'), epEl = document.getElementById('ep'), _bp = new V3();
 function bookAim() { return false; camera.getWorldDirection(_cd); const c = camera.position, dx = BOOK.x - c.x, dy = BOOK.y - c.y, dz = BOOK.z - c.z, d = Math.hypot(dx, dy, dz); return d < 1.5 && (dx * _cd.x + dy * _cd.y + dz * _cd.z) / d > 0.6; } let bookOpen = false;
@@ -1607,7 +1615,8 @@ function leavePool() {
   canvas.style.display = 'none'; document.getElementById('dot').style.display = 'none'; epEl.style.display = 'none';
   if (window.__poolReturn) window.__poolReturn(held);
 }
-window.__pool = { player, camera, keys, get away() { return away; } };   // a handle for testing from the console, like level 1's window.__cp
+window.__pool = { player, camera, keys, get away() { return !!away; } };   // a handle for testing from the console, like level 1's window.__cp
 window.__poolReady = true;
-// and now, behind all this, build the bounce house the two ENTER holes lead to
-import('./bounce.js').catch((e) => { window.__bounceFailed = true; console.error('bounce house failed to load', e); });
+// and now, behind all this, build the two places the ENTER holes lead to: the bounce house, then the store
+import('./bounce.js').catch((e) => { window.__bounceFailed = true; console.error('bounce house failed to load', e); })
+  .then(() => import('./store.js')).catch((e) => { window.__storeFailed = true; console.error('store failed to load', e); });

@@ -34,7 +34,7 @@
   function controlsPage() {
     const li = (k, t) => '<li><kbd>' + k + '</kbd> ' + t + '</li>';
     return { t: 'Controls', html: '<ul class="keys">' + li('W A S D', 'walk') + li('Shift', 'run') + li('Space', 'jump') + li('C', 'crouch')
-      + li('E', 'pick up, use') + li('Mouse', 'look (click the picture first)') + (hasGun() ? li('Z', 'size gun: smaller') + li('X', 'size gun: bigger') : '')
+      + li('E', 'pick up, use') + li('Mouse', 'look (click the picture first)') + (hasGun() ? li('Left click', 'size gun in hand: smaller') + li('Right click', 'size gun in hand: bigger') : '') + li('Wheel', 'switch what is in your hand')
       + li('G', 'this book, any time') + '</ul>' };
   }
   const CSS = `#gmenu{position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.35)}
