@@ -174,6 +174,7 @@ function drawVoid(C,VP,time){
     const ex=Math.max(0,Math.abs(cx)-VPX/2),ey=Math.max(0,Math.abs(cy)-VPY/2),ez=Math.max(0,Math.abs(cz)-VPZ/2),d2=ex*ex+ey*ey+ez*ez;if(d2>440*440)continue; // lost in the haze anyway
     mm[12]=ox;mm[13]=oy;mm[14]=oz;gl.uniformMatrix4fv(m.u.uModel,false,mm);gl.drawArrays(gl.TRIANGLES,0,VD.nCommon);
     if(d2<60*60)gl.drawArrays(gl.TRIANGLES,VD.nCommon+VD.nLod,VD.nDet);else gl.drawArrays(gl.TRIANGLES,VD.nCommon,VD.nLod);}
+  if(typeof rocketDraw==='function')rocketDraw(C,VP); // the rocket, if it has been set down here (js/rocketlaunch.js)
   gl.bindVertexArray(vao);
 }
 /* ---------- what the engine asks of this scene ---------- */
@@ -185,6 +186,7 @@ function sceneVoid(C,VP,time){
   drawVoid(C,VP,time);gl.disable(gl.DEPTH_TEST);
 }
 function tickVoid(dt){
+  if(typeof rocketTick==='function')rocketTick(dt);
   if(G.mode==='end'){ // nothing. Then daylight: the field of the white screen (js/hub.js).
     G.endT+=dt;gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);
     if(G.endT>4)enterHub();

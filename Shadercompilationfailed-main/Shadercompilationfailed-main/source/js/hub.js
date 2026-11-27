@@ -15,7 +15,7 @@ const LADDER_MID=0;         // "the very middle of the ladder", in metres above 
 // The ones after join the screen once this save has been to that place (each place adds itself to SCF_SAVE visited when you get there).
 // A new place: add a line to HUB_LATER, mark it visited when it starts, and give hubGo a way there.
 const HUB_BASE=[{label:'POOL',go:'pool'},{label:'CHECKERED ROOM',go:'room'},{label:'LADDER',go:'ladder'}];
-const HUB_LATER=[{label:'BOUNCE HOUSE',go:'bounce'},{label:'STORE',go:'store'}];
+const HUB_LATER=[{label:'BOUNCE HOUSE',go:'bounce'},{label:'STORE',go:'store'},{label:'RIVER',go:'river'},{label:'MOON STATION',go:'moon'}];
 const ROW_U0=0.07,ROW_U1=0.93;
 let HUB_ROWS=[],ROW_H=0.20;
 // where each line is drawn (as a fraction of the screen's height, from the top): three lines sit where they always have; more lines close up
@@ -347,6 +347,8 @@ function hubGo(i){
   windOff();ttlOff();lsOff();canvas.style.cursor='';HB.cur='';G.hint=0;
   const go=HUB_ROWS[i].go;
   if(go==='pool'){location.href='playroom.html';return;} // the playroom and its pool are a page of their own
+  if(go==='moon'){location.href='moonstation.html';return;} // the Moon's station, a page of its own
+  if(go==='river'){location.href='playroom.html#river';return;} // the river hall up the shaft over the size gun is built into the playroom's page
   // both of the others are in the first chamber, on this same page
   Snd.mute=false;if(Snd.ctx){Snd.master.gain.setTargetAtTime(0.9,Snd.ctx.currentTime,0.5);Snd.pad.gain.setTargetAtTime(0.05,Snd.ctx.currentTime,0.5);}
   G.shock=0;G.fovAdd=0;G.fall=0;G.told=false;loadLevel(0);G.fade=1;G.mode='play';

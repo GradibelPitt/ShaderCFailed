@@ -8,6 +8,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { MeshBVH } from 'three-mesh-bvh';
+import { buildRiverHall } from './riverhall.js';
 
 /* ------------------------------------------------------------------ */
 /* constants                                                           */
@@ -697,6 +698,8 @@ let lifebuoy;
 /* behind the round grate: the pipe, the flooded maze, the size gun   */
 /* ------------------------------------------------------------------ */
 const gun = { x: 0, y: 0, z: 0, group: null, got: !!SAVE.get('gun') };
+// over the size gun, a square shaft full of water goes up out of the maze ceiling (js/riverhall.js builds it, and the river hall it floats you up to)
+const SHAFT = { x: 0, z: 0, y0: MZ.y1, hs: 0.18, L: 1.85 };
 // the round door starts shut; E opens it at any size (SCF_SAVE grate: once opened it stays open), so you can see there is something back there
 const grate = { pivot: null, open: !!SAVE.get('grate'), t: SAVE.get('grate') ? 1 : 0, push: 0, toldAt: -1e9 };
 const mazeUni = { uTime: wUni.uTime, uCam: wUni.uCam };
@@ -744,13 +747,14 @@ const mazePipeMat = mazeMat.clone(); mazePipeMat.uniforms = mazeUni; mazePipeMat
   let far = IN; for (let c = 0; c < NX * NZ; c++) if (dist[c] > dist[far]) far = c;
   const path = []; for (let c = far; c >= 0; c = prev[c]) path.unshift(c);
   const cx = (c) => x0 + (c % NX + 0.5) * C, cz = (c) => z0 + (((c / NX) | 0) + 0.5) * C, ym = (y0 + y1) / 2;
-  gun.x = cx(far); gun.z = cz(far); gun.y = y0 + 0.07;
+  gun.x = cx(far); gun.z = cz(far); gun.y = y0 + 0.07; SHAFT.x = gun.x; SHAFT.z = gun.z;
   // light, baked into the tiles: the pool's glow coming in at the pipe, a few dim green portholes along the way, the gun's glow
   const lights = [{ x: GR.x, y: GR.y, z: z0 - 0.15, c: [0.42, 0.85, 0.78], r: 0.5, cell: IN }];
   const lamps = [];
   for (const f of [0.28, 0.52, 0.76]) { const c = path[Math.max(1, Math.min(path.length - 2, Math.round(f * (path.length - 1))))]; if (!lamps.includes(c)) lamps.push(c); }
   lamps.forEach((c, k) => { const fade = 1 - 0.28 * k; lights.push({ x: cx(c), y: y1 - 0.1, z: cz(c), c: [0.20 * fade, 0.55 * fade, 0.36 * fade], r: 0.42, cell: c, lamp: true }); });
   if (!gun.got) lights.push({ x: gun.x, y: gun.y + 0.05, z: gun.z, c: [0.45, 0.30, 0.80], r: 0.32, cell: far });
+  lights.push({ x: gun.x, y: y1 + 0.05, z: gun.z, c: [0.16, 0.42, 0.44], r: 0.3, cell: far });   // light coming down the shaft
   const near = (a, b) => a === b || nbrs(a).includes(b);
   const lightAt = (x, y, z, cell) => {
     let r = 0.022, g = 0.05, b = 0.05;
@@ -773,7 +777,14 @@ const mazePipeMat = mazeMat.clone(); mazePipeMat.uniforms = mazeUni; mazePipeMat
   for (let c = 0; c < NX * NZ; c++) {
     const i = c % NX, j = (c / NX) | 0, xa = x0 + i * C, za = z0 + j * C;
     quad([xa, y0, za], [C, 0, 0], [0, 0, C], [0, 1, 0], c);            // floor
-    quad([xa, y1, za], [C, 0, 0], [0, 0, C], [0, -1, 0], c);           // ceiling
+    if (c !== far) quad([xa, y1, za], [C, 0, 0], [0, 0, C], [0, -1, 0], c);           // ceiling
+    else {   // the dead end with the gun: its ceiling has the square mouth of the shaft in the middle
+      const hs = SHAFT.hs, hx0 = cx(c) - hs, hx1 = cx(c) + hs, hz0 = cz(c) - hs, hz1 = cz(c) + hs;
+      quad([xa, y1, za], [hx0 - xa, 0, 0], [0, 0, C], [0, -1, 0], c, 2);
+      quad([hx1, y1, za], [xa + C - hx1, 0, 0], [0, 0, C], [0, -1, 0], c, 2);
+      quad([hx0, y1, za], [2 * hs, 0, 0], [0, 0, hz0 - za], [0, -1, 0], c, 2);
+      quad([hx0, y1, hz1], [2 * hs, 0, 0], [0, 0, za + C - hz1], [0, -1, 0], c, 2);
+    }
     if (wx[j * (NX + 1) + i]) quad([xa, y0, za], [0, 0, C], [0, H2, 0], [1, 0, 0], c);
     if (wx[j * (NX + 1) + i + 1]) quad([xa + C, y0, za], [0, 0, C], [0, H2, 0], [-1, 0, 0], c);
     if (wz[(j + 1) * NX + i]) quad([xa, y0, za + C], [C, 0, 0], [0, H2, 0], [0, 0, -1], c);
@@ -842,6 +853,12 @@ const mazePipeMat = mazeMat.clone(); mazePipeMat.uniforms = mazeUni; mazePipeMat
     // at your usual size you are taller than the opening is wide, so only the shrunk you fits through (and see stepPlayer: no growing in there)
   }
 })();
+// under the shaft's mouth and in it: drawn into the middle, the way water rising up a pipe would take you
+function shaftAssist(dt) {
+  const p = player.pos; if (!player.swim || !(RH.inShaft(p.x, p.y, p.z) || RH.underShaft(p.x, p.y, p.z))) return;
+  const k = Math.min(1, dt * (RH.inShaft(p.x, p.y, p.z) ? 1.5 : 3)), c = RH.shaftCenter(p.y);
+  p.x += (c[0] - p.x) * k; p.z += (c[1] - p.z) * k;
+}
 // near the round door and swimming at it: you are drawn into the middle of the opening, the way water pulls at a drain
 function grateAssist(dt) {
   if (!small || !player.swim || !grate.open) return;
@@ -881,6 +898,9 @@ function takeGun() {
   toast('You found the size gun!<br><span style="font-size:20px;color:#5b6b70">Press <b>Z</b> to get smaller, <b>X</b> to get bigger.</span>', 5200);
 }
 
+// the river hall, up the shaft (js/riverhall.js): built before the collision tree, since its walls go into it too
+const RH = buildRiverHall({ scene, addCollider, CAUSTIC, uTime: wUni.uTime, uCam: wUni.uCam, shaft: SHAFT });
+
 /* ------------------------------------------------------------------ */
 /* collision BVH                                                       */
 /* ------------------------------------------------------------------ */
@@ -911,6 +931,8 @@ const capTest = {
   intersectsTriangle: (tri) => { if (tri.closestPointToSegment(_seg, _tv, _tv2) < _capR) { _capBlocked = true; return true; } return false; },
 };
 const inBasin = (x, z) => x > -PX && x < PX && z > PZ0 && z < PZ1;
+// the water surface over a point, wherever there is water: the pool, the flooded maze (and the bottom of the shaft), the river hall
+const waterAt = (x, y, z) => (y < 1 && (inBasin(x, z) || inMaze(x, z)) ? WATER_Y : RH.waterY(x, y, z));
 
 /* ------------------------------------------------------------------ */
 /* player                                                              */
@@ -1016,7 +1038,7 @@ function stepPlayer(dt) {
   let fw = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0), st = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
   const il = Math.hypot(fw, st); if (il > 1) { fw /= il; st /= il; }
   const sprint = keys.ShiftLeft || keys.ShiftRight;
-  const depth = inBasin(p.x, p.z) || inMaze(p.x, p.z) ? WATER_Y - p.y : -1;
+  const wtop = waterAt(p.x, p.y, p.z), depth = wtop === null ? -1 : wtop - p.y;
   if (!player.swim && depth > 1.1 * PS) { player.swim = true; v.y *= 0.35; player.crouch = false; cToggledOn = false; }
   else if (player.swim && depth < 0.95 * PS) player.swim = false;
 
@@ -1025,11 +1047,13 @@ function stepPlayer(dt) {
     let wx = (-sy * cp) * fw + cy * st, wy = sp * fw, wz = (-cy * cp) * fw - sy * st;
     if (keys.Space) wy += 1; if (keys.KeyC) wy -= 1;
     const wl = Math.hypot(wx, wy, wz); if (wl > 1) { wx /= wl; wy /= wl; wz /= wl; }
-    const floatY = WATER_Y - 1.3 * PS;
+    const floatY = (wtop === null ? WATER_Y : wtop) - 1.3 * PS;
     if (p.y > floatY && wy > 0) wy = 0;
     const spd = (sprint ? 2.0 : 1.2) * (small ? 0.7 : 1), k = 1 - Math.exp(-3.2 * dt);
     v.x += (wx * spd - v.x) * k; v.y += (wy * spd - v.y) * k; v.z += (wz * spd - v.z) * k;
-    if (p.y < floatY) { if (!keys.KeyC && wy >= -0.05 && (!small || p.z < PZ1 - 0.9)) v.y += 1.6 * dt; } else v.y -= 5 * dt;   // no drift up by the deep-end wall and in the flooded maze
+    const noDrift = small && p.z > PZ1 - 0.9 && p.z < MZ.z1 + 0.2 && p.y < 1;   // no drift up by the deep-end wall and in the flooded maze
+    if (p.y < floatY) { if (!keys.KeyC && wy >= -0.05 && !noDrift) v.y += 1.6 * dt; } else v.y -= 5 * dt;
+    if (!keys.KeyC && (RH.inShaft(p.x, p.y, p.z) || RH.underShaft(p.x, p.y, p.z))) v.y += (1.2 - v.y) * Math.min(1, dt * 4);   // the shaft lifts you: just let go
     const sx0 = p.x, sz0 = p.z, sw = Math.hypot(v.x, v.z) * dt;
     p.addScaledVector(v, dt);
     collidePlayer(dt); player.onGround = false;
@@ -1040,7 +1064,8 @@ function stepPlayer(dt) {
       player.blocked += dt;
       if (player.blocked > 0.15) {
         player.blocked = 0; const tx = p.x + wx / hl * 0.6, tz = p.z + wz / hl * 0.6;
-        if (!inBasin(tx, tz) && freeAt(tx, 0.06, tz, H_STAND)) player.mantle = { t: 0, dur: 0.55, from: p.clone(), to: new V3(tx, 0.03, tz) };
+        const ey = wtop !== null && wtop > 10 ? RH.edgeY : 0, wet = ey ? RH.inRiverXZ(tx, tz) : inBasin(tx, tz);
+        if (!wet && freeAt(tx, ey + 0.06, tz, H_STAND)) player.mantle = { t: 0, dur: 0.55, from: p.clone(), to: new V3(tx, ey + 0.03, tz) };
       }
     } else player.blocked = 0;
     return;
@@ -1098,7 +1123,7 @@ function updatePlayer(dt) {
     return;
   }
   if (player.mode === 'ride') updateRide(dt);
-  else { const n = 4; for (let i = 0; i < n; i++) { if (player.mode !== 'walk' || player.mantle) break; stepPlayer(dt / n); } if (player.mode === 'walk') { portalPlayer(); grateBlock(dt); grateAssist(dt); } }
+  else { const n = 4; for (let i = 0; i < n; i++) { if (player.mode !== 'walk' || player.mantle) break; stepPlayer(dt / n); } if (player.mode === 'walk') { portalPlayer(); grateBlock(dt); grateAssist(dt); shaftAssist(dt); if (RH.warp(player.pos)) heldSnap = true; } }
   // crouch height
   let target = player.crouch ? H_CROUCH : H_STAND;
   if (target > player.h + 0.01 && player.mode === 'walk' && !player.swim && !canStand()) target = player.h;
@@ -1519,7 +1544,8 @@ function startHum() {
   src.start(); o.start(); w.start(); hum = { g, nodes: [src, o, w] };
 }
 function startTeleport() {
-  if (leaving) return; leaving = performance.now();
+  if (leaving || RH.k > 0.2) return;   // not while you are up in the river hall
+  leaving = performance.now();
   if (hum) { try { hum.g.gain.value = 0; } catch (e) {} }
   startCollapse();   // the playroom caves in on you in black and white blocks; the collapse section below sends you on to level1.html
 }
@@ -1834,7 +1860,10 @@ placeCamera(0);
 /* loop                                                                */
 /* ------------------------------------------------------------------ */
 
-let last = -1, time = 0, frameNo = 0, gunHint = false;
+let last = -1, time = 0, frameNo = 0, gunHint = false, riverSeen = false;
+const markVisited = (id) => { const v = Array.isArray(SAVE.get('visited')) ? SAVE.get('visited').slice() : []; if (!v.includes(id)) { v.push(id); SAVE.set('visited', v); } };   // the level-select hall shows a line for every place you have been to
+// playroom.html#river (the level-select hall's RIVER line): start up in the river hall, by the near end
+if (location.hash === '#river') { player.pos.copy(RH.spawn.pos); player.yaw = RH.spawn.yaw; player.pitch = 0; player.vel.set(0, 0, 0); placeCamera(0); }
 function frame(now) {
   requestAnimationFrame(frame);
   if (last < 0) last = now;
@@ -1853,8 +1882,11 @@ function frame(now) {
   if (moving || ballsAwake > 0) syncBalls();
   if (lifebuoy) { lifebuoy.position.y = WATER_Y + 0.03 + Math.sin(time * 1.3) * 0.012; lifebuoy.rotation.y = Math.sin(time * 0.4) * 0.05; lifebuoy.rotation.z = time * 0.05; }
   const cp = camera.position;
-  const uw = cp.y < WATER_Y && (inBasin(cp.x, cp.z) || inMaze(cp.x, cp.z)) ? 1 : 0; under += (uw - under) * Math.min(1, dt * 10);
-  const inTunnel = cp.y > 1.9 && (cp.z < Z0 - 0.3 || cp.x > RX + 0.3) ? 1 : 0;
+  const wt = waterAt(cp.x, cp.y, cp.z), uw = wt !== null && cp.y < wt ? 1 : 0; under += (uw - under) * Math.min(1, dt * 10);
+  const inTunnel = cp.y > 1.9 && cp.y < 10 && (cp.z < Z0 - 0.3 || cp.x > RX + 0.3) ? 1 : 0;
+  RH.update(dt, cp, under, AC);
+  if (RH.k > 0.5 && !riverSeen) { riverSeen = true; markVisited('river'); }
+  if (music) { const gn = music.out && music.out.gain; if (gn) { if (music.g0 === undefined) music.g0 = gn.value; gn.value = music.g0 * (1 - 0.85 * RH.k); } else if (music.el) music.el.volume = 0.3 * (1 - 0.85 * RH.k); }   // the playroom's music is far away up here
   wUni.uTime.value = time; wUni.uCam.value.copy(cp);
   grade.uniforms.uTime.value = time; grade.uniforms.uUnder.value = under; grade.uniforms.uFade.value = leaving ? grade.uniforms.uFade.value : fade;
   if (!bookSeen) {
@@ -1870,7 +1902,7 @@ function frame(now) {
   bookPivot.rotation.y = Math.PI / 2 - 0.25 + time * 0.45;   // the book turns slowly on the spot
   if (bookOpen && Math.hypot(BOOK.x - cp.x, BOOK.z - cp.z) > 2.2) setBook(false);
   grade.uniforms.uHappy.value += ((dread === 0 ? 1 : 0) - grade.uniforms.uHappy.value) * Math.min(1, dt * 6);
-  grade.uniforms.uGray.value += ((dread === 0 ? 0 : Math.min(1, 0.38 + 0.62 * (dread - 1) / 7)) - grade.uniforms.uGray.value) * Math.min(1, dt * 0.8);
+  grade.uniforms.uGray.value += ((dread === 0 ? 0 : Math.min(1, 0.38 + 0.62 * (dread - 1) / 7)) * (1 - RH.k) - grade.uniforms.uGray.value) * Math.min(1, dt * 0.8);   // the river hall keeps its colour
   updateDread(dt, now);
   grade.uniforms.uDark.value += (inTunnel - grade.uniforms.uDark.value) * Math.min(1, dt * 3);
   if (CL) updateCollapse(dt, now);

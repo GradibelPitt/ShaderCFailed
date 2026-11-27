@@ -4,7 +4,7 @@
 // and deletes one from the list (after asking again).
 // A game page opened directly, without the menu, plays the slot last chosen, or the latest one, or makes a first one if there are none.
 // What a slot keeps:
-//   scene      where to pick up: 'playroom' | 'level1' | 'level2' | 'hub' (each scene writes it when it starts)
+//   scene      where to pick up: 'playroom' | 'level1' | 'level2' | 'hub' | 'moon' (each scene writes it when it starts)
 //   li         which checkerboard maze (0 = the first) when scene is 'level1'
 //   small      true while the player is shrunk (little stairs in the checkerboard rooms, or the size gun); every scene starts the player at this size
 //   moons      how many moons have been picked up in the checkerboard rooms, all visits together
@@ -15,7 +15,7 @@
 (function () {
   const KEY = 'scf.saves.v2', OLD = 'scf.save.v1';
   const FRESH = () => ({ scene: 'playroom', li: 0, small: false, moons: 0, skyMoons: 0, grate: false, gun: false });
-  const PAGES = { playroom: 'playroom.html', level1: 'level1.html', level2: 'level2.html', hub: 'hub.html' };
+  const PAGES = { playroom: 'playroom.html', level1: 'level1.html', level2: 'level2.html', hub: 'hub.html', moon: 'moonstation.html' };
   let db = null;
   function load() {
     let d = null; try { d = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { d = null; }

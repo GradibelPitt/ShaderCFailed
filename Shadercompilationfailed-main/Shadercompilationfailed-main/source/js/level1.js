@@ -848,6 +848,7 @@ function target(){ // what E would act on right now: a planet in reach, then the
   return no;
 }
 function interact(){
+  if(G.mode==='void'){if(typeof rocketE==='function')rocketE();return;} // the stair void: the rocket (js/rocketlaunch.js)
   if(G.mode!=='play'||flip||xing)return;const q=target();if(!q)return;
   if(!q.can){Snd.thud();return;}
   if(q.t==='moon'){ // the ladder comes down right by you (ladderCell), never off in some other room
