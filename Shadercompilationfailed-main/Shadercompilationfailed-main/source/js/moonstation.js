@@ -508,17 +508,16 @@ const sky = new THREE.Mesh(new THREE.SphereGeometry(30000, 64, 32), new THREE.Sh
         float line = exp(-abs(d) / 9.0) * 3.2 + exp(-abs(d) / 120.0) * 0.35;
         col = mix(col, vec3(0.055, 0.058, 0.064) * (0.4 + 0.6 * max(dot(Nr, S), 0.0)), step(0.0, d) * step(d, 520.0) * 0.92);
         col += vec3(1.0, 0.36, 0.10) * line;
-        // now and then a golden pulse runs along it, fast, trailing light behind it like a meteor
+        // now and then a small golden pulse goes round on the face of the band (not along its lit edge): a thin short streak, each on
+        // a track of its own, a bright head and a little light trailing behind it; never thinner than a pixel, fainter instead
         vec3 e1 = normalize(cross(Nr, vec3(0.0, 1.0, 0.0))), e2 = cross(Nr, e1), vv = rd * t - C;
-        float th = atan(dot(vv, e2), dot(vv, e1));
-        float near = exp(-abs(d) / 14.0) * 1.6 + exp(-abs(d) / 60.0) * 0.5;
-        for (int k = 0; k < 5; k++){
-          float fk = float(k), P = 5.0 + fk * 2.7, D = 2.6 + mod(fk * 1.3, 1.6), o = fk * 2.3;
-          float ph = mod(uTime + o, P); if (ph > D) continue;
-          float head = -3.14159 + 6.28318 * ph / D;                   // once round the ring while it lasts
-          float dl = mod(th - head + 3.14159, 6.28318) - 3.14159;      // where this point is relative to the head (negative: behind it)
-          float tail = dl < 0.0 ? exp(dl / 0.32) : exp(-dl / 0.012);
-          col += vec3(1.0, 0.78, 0.35) * tail * near * (2.2 + 4.0 * exp(-abs(dl) / 0.01));
+        float th = atan(dot(vv, e2), dot(vv, e1)), wd = clamp(fwidth(d) * 0.9, 3.0, 40.0), thin = sqrt(3.0 / wd);
+        for (int k = 0; k < 9; k++){
+          float fk = float(k), sp = (0.20 + 0.20 * fract(fk * 0.618)) * (mod(fk, 3.0) < 1.0 ? -1.0 : 1.0);
+          float dl = (mod(th - fk * 2.4 - uTime * sp + 3.14159, 6.28318) - 3.14159) * sign(sp);   // where this point is from the head, the way it is going (negative: behind it)
+          float across = exp(-abs(d - (70.0 + 390.0 * fract(fk * 0.37 + 0.2))) / wd) * thin;
+          float along = dl < 0.0 ? exp(dl / 0.020) : exp(-dl / 0.0012);
+          col += vec3(1.0, 0.70, 0.26) * across * along * (1.3 + 2.6 * exp(-abs(dl) / 0.0025));
         }
       }
     }
