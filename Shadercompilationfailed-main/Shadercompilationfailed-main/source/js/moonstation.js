@@ -337,6 +337,36 @@ const sky = new THREE.Mesh(new THREE.SphereGeometry(30000, 64, 32), new THREE.Sh
         float line = exp(-abs(d) / 9.0) * 3.2 + exp(-abs(d) / 120.0) * 0.35;
         col = mix(col, vec3(0.055, 0.058, 0.064) * (0.4 + 0.6 * max(dot(Nr, S), 0.0)), step(0.0, d) * step(d, 520.0) * 0.92);
         col += vec3(1.0, 0.36, 0.10) * line;
+        // now and then a golden pulse runs along it, fast, trailing light behind it like a meteor
+        vec3 e1 = normalize(cross(Nr, vec3(0.0, 1.0, 0.0))), e2 = cross(Nr, e1), vv = rd * t - C;
+        float th = atan(dot(vv, e2), dot(vv, e1));
+        float near = exp(-abs(d) / 14.0) * 1.6 + exp(-abs(d) / 60.0) * 0.5;
+        for (int k = 0; k < 5; k++){
+          float fk = float(k), P = 5.0 + fk * 2.7, D = 2.6 + mod(fk * 1.3, 1.6), o = fk * 2.3;
+          float ph = mod(uTime + o, P); if (ph > D) continue;
+          float head = -3.14159 + 6.28318 * ph / D;                   // once round the ring while it lasts
+          float dl = mod(th - head + 3.14159, 6.28318) - 3.14159;      // where this point is relative to the head (negative: behind it)
+          float tail = dl < 0.0 ? exp(dl / 0.32) : exp(-dl / 0.012);
+          col += vec3(1.0, 0.78, 0.35) * tail * near * (2.2 + 4.0 * exp(-abs(dl) / 0.01));
+        }
+      }
+    }
+    // small cruisers going round with the ring, a little off it, each with a bright engine and a long faint wake
+    {
+      vec3 e1 = normalize(cross(Nr, vec3(0.0, 1.0, 0.0))), e2 = cross(Nr, e1);
+      for (int k = 0; k < 9; k++){
+        float fk = float(k), w = (0.010 + 0.012 * fract(fk * 0.618)) * (mod(fk, 3.0) < 1.0 ? -1.0 : 1.0);
+        float th = fk * 2.17 + uTime * w;
+        vec3 Pp = C + (9300.0 + (fract(fk * 0.37) - 0.35) * 900.0) * (cos(th) * e1 + sin(th) * e2) + Nr * (fract(fk * 0.71) - 0.5) * 400.0;
+        float dist = length(Pp); vec3 u = Pp / dist;
+        if (dot(rd, u) < 0.999) continue;
+        float bb = dot(u, C), dd = bb * bb - (dot(C, C) - R * R); if (bb > 0.0 && dd > 0.0 && bb - sqrt(dd) < dist) continue;   // behind the Earth
+        vec3 T = normalize((-sin(th) * e1 + cos(th) * e2) * sign(w)); T = normalize(T - u * dot(T, u)); vec3 Np = cross(u, T);
+        vec3 dv = rd - u; float x = dot(dv, T), y = dot(dv, Np);
+        float hull = smoothstep(1.0, 0.4, (x * x) / (0.0026 * 0.0026) + (y * y) / (0.0007 * 0.0007));
+        col = mix(col, vec3(0.78, 0.80, 0.84) * (0.4 + 0.6 * smoothstep(-0.0007, 0.0007, y)), hull);
+        col += vec3(0.6, 0.85, 1.6) * 3.0 * exp(-(pow(x + 0.0026, 2.0) + y * y) / (0.0006 * 0.0006));
+        if (x < -0.0026) col += vec3(0.45, 0.7, 1.0) * 0.7 * exp((x + 0.0026) / 0.014) * exp(-y * y / (0.00035 * 0.00035));
       }
     }
     gl_FragColor = vec4(col, 1.0);
@@ -540,6 +570,13 @@ const outMat = (kind, base = [0, 0, 0]) => new THREE.ShaderMaterial({
     vec3 alb = vec3(0.70, 0.71, 0.72);
     float sl = max(dot(n, uSun), 0.0);
     col = alb * (vec3(1.0, 0.98, 0.95) * 1.1 * sl + vec3(0.07, 0.09, 0.13));
+  #elif KIND == 4
+    // solar panels: deep blue cells in a fine grid, catching the sun as they turn
+    vec2 u = abs(n.y) > 0.5 ? vW.xz : vW.xy;
+    float grid = max(step(0.9, fract(u.x / 9.0)), step(0.9, fract(u.y / 9.0)));
+    vec3 alb = mix(vec3(0.03, 0.06, 0.16), vec3(0.4, 0.42, 0.45), grid * 0.6);
+    float sl = max(dot(n, uSun), 0.0); vec3 v = normalize(uCam - vW);
+    col = alb * (1.2 * sl + 0.08) + vec3(0.6, 0.7, 1.0) * pow(max(dot(reflect(-uSun, n), v), 0.0), 60.0) * 1.5;
   #else
     col = uBase; glow = 1.0;
   #endif
@@ -624,6 +661,148 @@ function groundH(x, z) {
   const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
   const pm = new THREE.Points(pg, new THREE.PointsMaterial({ color: new THREE.Color(2.6, 2.1, 1.5), size: 2.2, sizeAttenuation: false, transparent: true, depthWrite: false })); pm.frustumCulled = false; scene.add(pm);
 }
+// The megastructures: three of them hanging out over the Earth beyond the open end, high up (the big two are hidden by the roof from inside
+// the hall: you only see them from out on the platform, looking up), kilometres across, built of plates and blocks and
+// trusses on every scale (the big one a tower with a broken ring round it and gold rings of light at its waist), turning very slowly;
+// small ships go to and fro round the big one.
+const megaMat = (kind) => new THREE.ShaderMaterial({
+  uniforms: { uCam, uSun: { value: SUN }, uTime }, side: THREE.DoubleSide, defines: { KIND: kind },
+  vertexShader: `#include <common>
+  #include <logdepthbuf_pars_vertex>
+  varying vec3 vW; varying vec3 vN; varying vec3 vL; varying vec3 vNl;
+  void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; vL = position; vNl = normal; vN = normalize(mat3(modelMatrix) * normal);
+    gl_Position = projectionMatrix * viewMatrix * w;
+    #include <logdepthbuf_vertex>
+  }`,
+  fragmentShader: `#include <logdepthbuf_pars_fragment>
+  ${NOISE}
+  uniform vec3 uCam, uSun; uniform float uTime; varying vec3 vW; varying vec3 vN; varying vec3 vL; varying vec3 vNl;
+  float seam(vec2 q, float S, float w){ vec2 f = abs(fract(q / S) - 0.5) * S; vec2 aa = fwidth(q) * 0.9; vec2 s = 1.0 - smoothstep(vec2(w) - aa, vec2(w) + aa, f); return max(s.x, s.y) * clamp(1.0 - max(fwidth(q.x), fwidth(q.y)) / (S * 0.25), 0.0, 1.0); }
+  void main(){
+    #include <logdepthbuf_fragment>
+    vec3 n = normalize(vN); if (dot(n, uCam - vW) < 0.0) n = -n;
+    vec3 an = abs(vNl); vec2 q = an.x > 0.5 ? vL.zy : (an.y > 0.5 ? vL.xz : vL.xy);
+    float side = an.x > 0.5 ? 1.0 : (an.y > 0.5 ? 2.0 : 3.0);
+    // plates in three sizes, each its own shade: mostly off-white, some blue-grey, now and then a dull red
+    vec2 i1 = floor(q / 90.0), i2 = floor(q / 26.0), i3 = floor(q / 7.0);
+    float h1 = hash3(vec3(i1, side)), h2 = hash3(vec3(i2, side + 4.0)), h3 = hash3(vec3(i3, side + 9.0));
+    vec3 alb = vec3(0.70, 0.71, 0.72) * (0.82 + 0.22 * h1) * (0.9 + 0.14 * h2) * (0.94 + 0.08 * h3);
+    if (h2 > 0.82) alb = mix(alb, vec3(0.33, 0.38, 0.46), 0.75);
+    if (h1 > 0.93) alb = mix(alb, vec3(0.50, 0.17, 0.14), 0.7);
+  #if KIND == 1
+    alb = vec3(0.20, 0.22, 0.25) * (0.8 + 0.4 * h2);   // trusses and the dark undersides
+  #endif
+    alb *= 1.0 - 0.45 * seam(q, 90.0, 1.2) - 0.3 * seam(q, 26.0, 0.5) - 0.18 * seam(q, 7.0, 0.18);
+    // each plate sits at its own slight angle, so the light breaks up across them
+    vec3 pn = normalize(n + (vec3(hash3(vec3(i2, 1.0)), hash3(vec3(i2, 2.0)), hash3(vec3(i2, 3.0))) - 0.5) * 0.22);
+    float sl = max(dot(pn, uSun), 0.0);
+    float fill = max(dot(pn, normalize(vec3(0.1, -0.8, -0.55))), 0.0);   // the Earth, bright below
+    vec3 v = normalize(uCam - vW);
+    vec3 col = alb * (vec3(1.0, 0.97, 0.92) * 1.55 * sl + vec3(0.25, 0.42, 0.7) * 0.32 * fill + vec3(0.025, 0.03, 0.045));
+    col += vec3(0.9) * pow(max(dot(reflect(-uSun, pn), v), 0.0), 50.0) * 0.35 * sl;
+    // rows of small windows on some plates; a few of them lit
+    vec2 wq = q / vec2(5.0, 3.5); vec2 wi = floor(wq), wf = fract(wq);
+    float win = step(0.72, h1) * step(0.25, wf.x) * step(wf.x, 0.75) * step(0.3, wf.y) * step(wf.y, 0.7) * clamp(1.0 - fwidth(wq.x) * 1.5, 0.0, 1.0);
+    float lit = step(0.8, hash3(vec3(wi, 7.0)));
+    col = mix(col, vec3(0.02, 0.025, 0.035), win * 0.8);
+    col += win * lit * mix(vec3(1.6, 1.1, 0.6), vec3(0.6, 0.9, 1.6), step(0.5, hash3(vec3(wi, 3.0)))) * 0.9;
+    float d = distance(uCam, vW);
+    col = mix(col, vec3(0.03, 0.045, 0.07), (1.0 - exp(-d / 220000.0)));
+    gl_FragColor = vec4(col, 1.0);
+  }`,
+});
+const megas = [];
+{
+  const r = mulberry32(2027), M4 = THREE.Matrix4;
+  const B = (arr, cx, cy, cz, sx, sy, sz, m) => { const b = new THREE.BoxGeometry(sx, sy, sz); b.deleteAttribute('uv'); b.translate(cx, cy, cz); if (m) b.applyMatrix4(m); arr.push(b); };
+  // blocks stuck all over one face of a box (centre c, half sizes h), pointing out along axis ax (0 x, 1 y, 2 z) and sign sg
+  const greeble = (arr, c, h, ax, sg, n, smin, smax, m) => {
+    for (let k = 0; k < n; k++) {
+      const s = [smin + r() * (smax - smin), smin + r() * (smax - smin), smin + r() * (smax - smin)], p = [0, 0, 0];
+      for (let a = 0; a < 3; a++) p[a] = c[a] + (r() * 2 - 1) * Math.max(0, h[a] - s[a] / 2);
+      const out = s[ax] = (0.15 + r() * 0.6) * smax; p[ax] = c[ax] + sg * (h[ax] + out / 2 - 2);
+      B(arr, p[0], p[1], p[2], s[0], s[1], s[2], m);
+    }
+  };
+  const boxDetailed = (arr, c, h, n, smin, smax, m, skipY) => { B(arr, c[0], c[1], c[2], 2 * h[0], 2 * h[1], 2 * h[2], m); for (let ax = 0; ax < 3; ax++) for (const sg of [-1, 1]) if (!(skipY && ax === 1)) greeble(arr, c, h, ax, sg, n, smin, smax, m); };
+  const finish = (hull, dark, glow, pos, scale, rot) => {
+    const g = new THREE.Group();
+    const mk = (arr, mt) => { if (!arr.length) return; const me = new THREE.Mesh(mergeGeometries(arr.map((q) => q.index ? q.toNonIndexed() : q)), mt); me.frustumCulled = false; g.add(me); };
+    mk(hull, megaMat(0)); mk(dark, megaMat(1)); mk(glow, outMat(3, [5.0, 3.4, 0.9]));
+    g.position.set(...pos); g.scale.setScalar(scale); g.rotation.set(...rot); scene.add(g); return g;
+  };
+  // 1: the tower and its broken ring
+  {
+    const hull = [], dark = [], glow = [];
+    let y = -2600;
+    while (y < 1500) {
+      const hgt = 120 + r() * 380, w = 260 + r() * 220, d = 220 + r() * 200, ox = (r() - 0.5) * 60, oz = (r() - 0.5) * 60;
+      boxDetailed(hull, [ox, y + hgt / 2, oz], [w / 2, hgt / 2, d / 2], 5 + (r() * 6 | 0), 15, 90);
+      if (r() < 0.35) B(dark, ox + (r() - 0.5) * w, y + hgt / 2, oz + d / 2 + 30, 20, hgt * 0.9, 20);
+      y += hgt;
+    }
+    boxDetailed(hull, [40, 1500 + 350, 0], [150, 350, 120], 6, 12, 60);                       // the block at the top
+    for (let k = 0; k < 8; k++) B(dark, (r() - 0.5) * 240, 2200 + r() * 160, (r() - 0.5) * 180, 6, 160 + r() * 200, 6);   // masts
+    // the ring: 290 degrees of it, in segments of different depth, built over with blocks, open at one side
+    const RR = 2000;
+    for (let k = 0; k < 40; k++) {
+      const a = 0.6 + k / 40 * 5.06, len = RR * 5.06 / 40 * 1.02, m = new M4().makeRotationY(-a).premultiply(new M4().makeTranslation(Math.cos(a) * RR, 300, Math.sin(a) * RR));
+      const rd = 420 + r() * 260, hh = 300 + r() * 160;
+      boxDetailed(hull, [0, 0, 0], [rd / 2, hh / 2, len / 2], 3 + (r() * 4 | 0), 20, 120, m);
+      if (r() < 0.5) boxDetailed(hull, [rd / 2 + 60, (r() - 0.5) * 100, 0], [70, hh * 0.3, len * 0.3], 2, 10, 40, m);
+      if (r() < 0.4) B(dark, -rd / 2 - 20, -hh / 2 - 40, 0, 30, 80, len * 0.8, m);
+    }
+    for (const a of [0.6, 5.66]) { const m = new M4().makeRotationY(-a).premultiply(new M4().makeTranslation(Math.cos(a) * RR, 300, Math.sin(a) * RR));   // trusses across the open ends
+      for (let k = 0; k < 6; k++) B(dark, (k - 2.5) * 90, 0, 0, 14, 420, 14, m); B(dark, 0, 200, 0, 520, 14, 14, m); B(dark, 0, -200, 0, 520, 14, 14, m); }
+    for (const a of [1.6, 3.3, 4.9]) { const m = new M4().makeRotationY(-a); B(dark, RR / 2, 300, 0, RR - 300, 40, 40, m); B(dark, RR / 2, 380, 0, RR - 300, 16, 16, m); }   // spokes
+    // the gold rings of light at its waist
+    for (const [rr, t] of [[430, 9], [560, 6], [700, 11]]) { const tg = new THREE.TorusGeometry(rr, t, 6, 96); tg.deleteAttribute('uv'); tg.rotateX(Math.PI / 2); tg.translate(0, 250, 0); glow.push(tg); }
+    for (let k = 0; k < 48; k++) { const a = k / 48 * Math.PI * 2; if (k % 3 === 0) continue; const m = new M4().makeRotationY(-a); B(glow, 630, 250, 0, 90, 6, 18, m); }
+    megas.push({ g: finish(hull, dark, glow, [-11000, 42000, -28000], 2.3, [0.12, 0.6, 0.05]), spin: 0.0012, bob: 400 });
+  }
+  // 2: a spine with two great wheels
+  {
+    const hull = [], dark = [], glow = [];
+    boxDetailed(hull, [0, 0, 0], [120, 1500, 120], 22, 15, 70);
+    for (const wy of [-700, 650]) {
+      const RR = 1100;
+      for (let k = 0; k < 36; k++) { const a = k / 36 * Math.PI * 2, m = new M4().makeRotationY(-a).premultiply(new M4().makeTranslation(Math.cos(a) * RR, wy, Math.sin(a) * RR));
+        boxDetailed(hull, [0, 0, 0], [130, 110, RR * Math.PI / 36 * 1.03], 2, 12, 50, m); }
+      for (let k = 0; k < 4; k++) { const m = new M4().makeRotationY(-k * Math.PI / 2); B(dark, RR / 2, wy, 0, RR, 30, 30, m); }
+      const tg = new THREE.TorusGeometry(260, 6, 6, 64); tg.deleteAttribute('uv'); tg.rotateX(Math.PI / 2); tg.translate(0, wy, 0); glow.push(tg);
+    }
+    megas.push({ g: finish(hull, dark, glow, [2000, 50000, -36000], 1.9, [0.35, 0.2, -0.25]), spin: -0.002, bob: 300 });
+  }
+  // 3: a long hauler, lying across
+  {
+    const hull = [], dark = [], glow = [];
+    let x = -1400;
+    while (x < 1400) { const l = 120 + r() * 260, w = 160 + r() * 200, h = 140 + r() * 180; boxDetailed(hull, [x + l / 2, (r() - 0.5) * 40, 0], [l / 2, h / 2, w / 2], 4, 12, 60); x += l + 10; }
+    B(dark, 0, 0, 0, 2900, 50, 50);
+    for (let k = 0; k < 4; k++) { const tg = new THREE.CylinderGeometry(70, 90, 120, 16); tg.deleteAttribute('uv'); tg.rotateZ(Math.PI / 2); tg.translate(-1460, (k % 2 - 0.5) * 180, (k < 2 ? -1 : 1) * 90); dark.push(tg); }
+    for (let k = 0; k < 4; k++) B(glow, -1525, (k % 2 - 0.5) * 180, (k < 2 ? -1 : 1) * 90, 8, 120, 120);
+    megas.push({ g: finish(hull, dark, glow, [-33000, 10500, -44000], 1.6, [0.05, -0.5, 0.08]), spin: 0.0, bob: 200, drift: 25 });
+  }
+  // small ships round the big one
+  const sh = [], sg = [];
+  for (let k = 0; k < 10; k++) { const s = 30 + r() * 50; B(sh, 0, 0, 0, s * 3, s * 0.7, s); B(sg, -s * 1.55, 0, 0, 4, s * 0.5, s * 0.6); }
+  const shipGeo = mergeGeometries(sh.map((q) => q.toNonIndexed())), glowGeo = mergeGeometries(sg.map((q) => q.toNonIndexed()));
+  for (let k = 0; k < 10; k++) {
+    const g = new THREE.Group(); g.add(new THREE.Mesh(shipGeo, megaMat(0))); g.add(new THREE.Mesh(glowGeo, outMat(3, [1.5, 2.6, 4.0])));
+    g.traverse((o) => { o.frustumCulled = false; }); g.scale.setScalar(1.6); scene.add(g);
+    megas.push({ ship: g, R: 3600 + r() * 2600, ph: r() * 6.28, sp: 0.01 + r() * 0.02, yy: (r() - 0.5) * 3000 });
+  }
+}
+function megaFrame(t) {
+  const c = megas[0].g.position;
+  for (const m of megas) {
+    if (m.ship) { const a = m.ph + t * m.sp, x = c.x + Math.cos(a) * m.R * 1.4, z = c.z + Math.sin(a) * m.R * 1.4; m.ship.position.set(x, c.y + m.yy + Math.sin(a * 2) * 300, z); m.ship.rotation.y = -a - Math.PI / 2; continue; }
+    if (m.base === undefined) m.base = m.g.position.clone();
+    m.g.rotation.y += m.spin * 0.016;
+    m.g.position.set(m.base.x + (m.drift ? Math.sin(t * 0.003) * m.drift * 40 : 0), m.base.y + Math.sin(t * 0.05 + m.base.x) * m.bob * 0.1, m.base.z);
+  }
+}
+
 // the platform itself: white, 600 m deep, from the right-hand side of the hall to 5 km past the cliff; a low rail along the open parts
 {
   const box = (x0, y0, z0, x1, y1, z1) => { const b = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0); b.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2); return b; };
@@ -752,7 +931,7 @@ function frame(now) {
   requestAnimationFrame(frame);
   if (last < 0) last = now; const dt = clamp((now - last) / 1000, 0, 1 / 20); last = now; uTime.value += dt; fadeT += dt;
   if (!(window.SCF_G && window.SCF_G.isOpen())) { if (CAR.on) drive(dt); else step(dt); }
-  carFrame(dt);
+  carFrame(dt); megaFrame(uTime.value);
   placeCamera(uTime.value); uCam.value.copy(camera.position);
   // dust: kept round you, drifting
   { const a = dust.a, c = camera.position, t = uTime.value;
