@@ -10,11 +10,13 @@
 //   moons      how many moons have been picked up in the checkerboard rooms, all visits together
 //   skyMoons   how many times the big moon has been pulled out of the sky
 //   grate      true once the round mesh door low on the pool's deep-end wall has been opened (it stays open)
+//   allLevels  true when Admin settings (G book > Settings > Admin settings) has unlocked every level for this save: the level-select hall's
+//              screen then lists every place, and the G book's Level select button opens, visited or not
 //   gun        true once the size gun (伸缩枪) at the end of the flooded passages behind the pool has been found (js/sizegun.js: Z smaller, X bigger)
 'use strict';
 (function () {
   const KEY = 'scf.saves.v2', OLD = 'scf.save.v1';
-  const FRESH = () => ({ scene: 'playroom', li: 0, small: false, moons: 0, skyMoons: 0, grate: false, gun: false });
+  const FRESH = () => ({ scene: 'playroom', li: 0, small: false, moons: 0, skyMoons: 0, grate: false, gun: false, allLevels: false });
   const PAGES = { playroom: 'playroom.html', level1: 'level1.html', level2: 'level2.html', hub: 'hub.html', moon: 'moonstation.html' };
   let db = null;
   function load() {

@@ -21,7 +21,8 @@ let HUB_ROWS=[],ROW_H=0.20;
 // where each line is drawn (as a fraction of the screen's height, from the top): three lines sit where they always have; more lines close up
 function hubRows(){
   const v=(window.SCF_SAVE&&Array.isArray(SCF_SAVE.get('visited')))?SCF_SAVE.get('visited'):[];
-  const rows=HUB_BASE.concat(HUB_LATER.filter(r=>v.includes(r.go))).map(r=>Object.assign({},r)),n=rows.length,gap=Math.min(0.26,0.84/n);
+  const all=!!(window.SCF_SAVE&&SCF_SAVE.get('allLevels')); // Admin settings: every level unlocked for this save
+  const rows=HUB_BASE.concat(HUB_LATER.filter(r=>all||v.includes(r.go))).map(r=>Object.assign({},r)),n=rows.length,gap=Math.min(0.26,0.84/n);
   rows.forEach((r,i)=>{r.y=0.5+(i-(n-1)/2)*gap;});ROW_H=gap*0.77;HUB_ROWS=rows;if(hubRows.ready)HB.dirty=true;
 }
 const HB={x:0,z:HUB_Z,y:0,vy:0,title:-1,hover:-1,pick:-1,pt:0,gone:false,dirty:true,blink:0,step:0,tf:0.7,asp:1.78,mouse:null,down:null,tap:null,prog:null,tex:null,cv:null,wind:null,cur:''};

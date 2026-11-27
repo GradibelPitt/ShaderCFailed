@@ -65,7 +65,7 @@ vec3 shade(vec3 p, vec3 n, vec3 alb, float rough, float spk){
   c += vec3(0.42, 0.60, 0.86) * 1.7 * (max(e, 0.0) * 0.82 + 0.18 * (e * 0.5 + 0.5)) * op;
   c += vec3(1.0, 0.36, 0.11) * 0.16 * max(dot(n, DIR_O), 0.0) * (0.3 + 0.7 * smoothstep(3000.0, 11000.0, p.y));
   vec3 sp = vec3(clamp(p.x, -4300.0, 4800.0), ${STRIP_Y.toFixed(1)}, ${PZ1.toFixed(1)}); vec3 sd = sp - p; float dd = length(sd) + 1.0;
-  c += vec3(0.85, 0.92, 1.0) * 1.1 * max(dot(n, sd / dd), 0.0) / (1.0 + dd * dd / (1000.0 * 1000.0));
+  c += vec3(0.85, 0.92, 1.0) * 0.65 * max(dot(n, sd / dd), 0.0) / (1.0 + dd * dd / (1000.0 * 1000.0));
   vec3 dl = vec3(${DOOR.x.toFixed(1)}, 2.75, 2999.6) - p; float dld = length(dl) + 0.01;
   c += vec3(1.0, 0.72, 0.42) * 1.6 * max(dot(n, dl / dld), 0.0) / (1.0 + dld * dld / 9.0);
   vec3 v = normalize(uCam - p), h = normalize(DIR_E + v);
@@ -353,7 +353,7 @@ const floor = add((() => { const g = new THREE.PlaneGeometry(XR - XL + 1200, ZB 
   add(box(DOOR.x - 0.16, 2.68, ZB - 0.12, DOOR.x + 0.16, 2.78, ZB), mat(4, [6.0, 4.4, 2.6], 'doorlamp'));                        // the lamp over it
   // the low wall at the far end, and its line of light
   add(box(XL - 600, 0, PZ1 - PAR_D, XR + 900, PAR_H, PZ1), mat(3));
-  add(box(XL - 600, STRIP_Y - 14, PZ1 + 0.5, XR + 900, STRIP_Y + 14, PZ1 + 3), mat(4, [3.6, 3.9, 4.2], 'strip'));
+  add(box(XL - 600, STRIP_Y - 14, PZ1 + 0.5, XR + 900, STRIP_Y + 14, PZ1 + 3), mat(4, [1.3, 1.4, 1.5], 'strip')   /* toned down: it was glaring (was 3.6, 3.9, 4.2) */);
 }
 
 /* ---------------- little lights: how big it is ---------------- */
@@ -579,7 +579,7 @@ function placeCamera(t) {
   if (CAR.on) {   // in the driver's seat, a little shake that grows with the speed
     const c = Math.cos(CAR.yaw), s = Math.sin(CAR.yaw), k = clamp(Math.abs(CAR.v) / CAR_MAX, 0, 1), j = (Math.random() - 0.5) * 0.012 * k;
     camera.position.set(CAR.x + c * SEAT[0] + s * SEAT[2], SEAT[1] + j, CAR.z - s * SEAT[0] + c * SEAT[2]);
-    camera.rotation.set(P.pitch, P.yaw, 0); camera.updateMatrixWorld(); return;
+    camera.rotation.set(P.pitch, P.yaw, CAR.roll); camera.updateMatrixWorld(); return;
   }
   const hs = Math.hypot(P.vel.x, P.vel.z);
   camera.position.set(P.pos.x, P.pos.y + EYE + Math.sin(P.bob * Math.PI * 2 / 1.56) * 0.025 * clamp(hs / 2, 0, 1), P.pos.z);
@@ -1027,10 +1027,10 @@ function walkClamp(pos, m) {
 
 /* ---------------- the car ---------------- */
 // The hall is far too big to walk, so by the door there is something to drive, absurdly fast. E to get in (and out,
-// once it has stopped). W to go, S to brake (and back up), A/D to steer, Space for the hand brake. Flat out it does about 640 m/s,
-// so the light at the far end is some twenty seconds away. It stops dead at the walls.
-const CAR = { x: DOOR.x + 7, z: ZB - 10, yaw: 0, v: 0, steer: 0, on: false, g: new THREE.Group(), hintT: 0, fov: 72, roll: 0, wheels: [], hide: null };
-const CAR_MAX = 640, CAR_ACC = 230, SEAT = [0.0, 1.62, 0.6], BUS = { hw: 0.75, hl: 1.55 };
+// once it has stopped). W to go, S to brake (and back up), A/D to steer, Space for the hand brake. Flat out it does about 160 m/s,
+// so the light at the far end is a bit over a minute away. It stops dead at the walls.
+const CAR = { x: DOOR.x + 7, z: ZB - 10, yaw: 0, v: 0, steer: 0, sv: 0, yr: 0, on: false, g: new THREE.Group(), hintT: 0, fov: 72, roll: 0, wheels: [], hide: null };
+const CAR_MAX = 160, CAR_ACC = 75, SEAT = [0.0, 1.62, 0.6], BUS = { hw: 0.75, hl: 1.55 };
 // It is an airport baggage tug, done as close to the real thing as I can: a white steel body with a blue stripe and rounded edges, a big
 // orange bonnet with a grille, round headlamps, black fenders over fat treaded tyres on steel rims (the wheels turn, the front ones steer),
 // a bent-tube bumper, mirrors, an open seat behind a small dash with gauges, a step plate in chequered aluminium, a tow hitch, tail lamps
@@ -1116,7 +1116,7 @@ function carE() {
     const c = Math.cos(CAR.yaw), s = Math.sin(CAR.yaw);   // out on the driver's side
     const lx = -BUS.hw - 1.0, lz = SEAT[2]; P.pos.set(CAR.x + c * lx + s * lz, 0, CAR.z - s * lx + c * lz); P.vel.set(0, 0, 0); return;
   }
-  if (carNear()) { CAR.on = true; CAR.hintT = 7; P.vel.set(0, 0, 0); P.yaw = CAR.yaw; P.pitch = -0.22; initAudio(); }
+  if (carNear()) { CAR.on = true; CAR.hintT = 7; CAR.steer = CAR.sv = CAR.yr = CAR.roll = 0; P.vel.set(0, 0, 0); P.yaw = CAR.yaw; P.pitch = -0.22; initAudio(); }
 }
 addEventListener('keydown', (e) => { if (e.code === 'KeyE' && !e.repeat && !(window.SCF_G && window.SCF_G.isOpen())) carE(); });
 let eng = null;
@@ -1125,13 +1125,19 @@ function drive(dt) {
   if (keys.ArrowUp) P.pitch = Math.min(1.5, P.pitch + 1.3 * dt); if (keys.ArrowDown) P.pitch = Math.max(-1.5, P.pitch - 1.3 * dt);
   const thr = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0), st = (keys.KeyA ? 1 : 0) - (keys.KeyD ? 1 : 0), av = Math.abs(CAR.v);
   if (thr > 0) CAR.v += CAR_ACC * dt * (1 - 0.55 * Math.max(CAR.v, 0) / CAR_MAX) * (CAR.v < 0 ? 3 : 1);
-  else if (thr < 0) CAR.v -= (CAR.v > 0 ? 420 : 12) * dt;
-  else CAR.v -= Math.sign(CAR.v) * Math.min(av, (6 + CAR.v * CAR.v * 0.0003) * dt);
-  if (keys.Space) CAR.v -= Math.sign(CAR.v) * Math.min(Math.abs(CAR.v), 650 * dt);
+  else if (thr < 0) CAR.v -= (CAR.v > 0 ? 140 : 12) * dt;
+  else CAR.v -= Math.sign(CAR.v) * Math.min(av, (4 + CAR.v * CAR.v * 0.0008) * dt);
+  if (keys.Space) CAR.v -= Math.sign(CAR.v) * Math.min(Math.abs(CAR.v), 200 * dt);
   CAR.v = clamp(CAR.v, -20, CAR_MAX);
-  CAR.steer += (st - CAR.steer) * Math.min(1, dt * 6);
-  const yr = CAR.steer * 1.4 * clamp(Math.abs(CAR.v) / 6, 0, 1) / (1 + Math.abs(CAR.v) / 80) * (CAR.v < 0 ? -1 : 1);
+  // steering: the wheel moves on a soft spring (no snap at either end, and it comes back to the middle a little quicker than it goes out),
+  // and the car's turn eases in behind it, so a tap is a small, clean correction and a held key a smooth, tight curve
+  { const k = st !== 0 ? 85 : 110, d = 2 * Math.sqrt(k);
+    CAR.sv += ((st - CAR.steer) * k - CAR.sv * d) * dt; CAR.steer = clamp(CAR.steer + CAR.sv * dt, -1, 1); }
+  const av2 = Math.abs(CAR.v), yrT = CAR.steer * 2.3 * clamp(av2 / 2.5, 0, 1) / (1 + av2 / 95) * (CAR.v < 0 ? -1 : 1);
+  CAR.yr += (yrT - CAR.yr) * Math.min(1, dt * 10);
+  const yr = CAR.yr;
   CAR.yaw += yr * dt; P.yaw += yr * dt;   // the view turns with the car
+  CAR.roll += (-yr * clamp(av2 / 60, 0, 1) * 0.045 - CAR.roll) * Math.min(1, dt * 6);   // and leans a touch out of the turn
   CAR.x -= Math.sin(CAR.yaw) * CAR.v * dt; CAR.z -= Math.cos(CAR.yaw) * CAR.v * dt;
   // the walls of the hall stop it dead
   { const q = { x: CAR.x, z: CAR.z }; walkClamp(q, 2.5); if (Math.abs(q.x - CAR.x) + Math.abs(q.z - CAR.z) > 1e-6) { const hit = Math.abs(CAR.v); CAR.x = q.x; CAR.z = q.z; CAR.v *= -0.1; if (hit > 25) footstep(4); } }

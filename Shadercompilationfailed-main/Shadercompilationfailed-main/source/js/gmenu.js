@@ -1,7 +1,8 @@
 // The G book: press G at any time, in any scene, for a little instruction book.
 // Its pages come from the scene (SCF_G.setPages(fn): fn() returns the pages for right now); every scene also gets a page of controls.
 // Top left of the book: back to the main menu (index.html; click twice). Top middle: Level select, straight to the level-select hall (hub.html),
-// always shown but locked until this save has been there once (SCF_SAVE hubSeen). Top right: settings (mouse sensitivity, volume), kept for all saves.
+// always shown but locked until this save has been there once (SCF_SAVE hubSeen). Top right: settings (mouse sensitivity, volume), kept for all saves,
+// and under them Admin settings, which act on the save being played only: Unlock all levels (SCF_SAVE allLevels).
 // While the book is open the game gets no keys and no clicks, and the pointer is let go so the buttons can be clicked.
 // Also here: the settings themselves (window.SCF_SETTINGS), and the volume, applied to every sound the page makes by putting a gain
 // between each audio context and its speakers (so every scene's own sound code works unchanged). Load this right after js/save.js.
@@ -61,7 +62,12 @@
 #gmenu .dots{display:flex;gap:8px}#gmenu .dots i{display:block;width:11px;height:11px;border-radius:50%;background:#e2d7b3}#gmenu .dots i.on{background:#e0692a}
 #gmenu .close{margin:14px 0 0;text-align:right;font-size:17px;color:#7a8a8f}
 #gmenu .set label{display:block;margin:14px 0 2px}#gmenu .set input[type=range]{width:100%;accent-color:#e0692a}
-#gmenu .set .v{float:right;color:#e0692a}`;
+#gmenu .set .v{float:right;color:#e0692a}
+#gmenu .adm{display:block;margin:20px 0 0;padding:6px 12px;font:inherit;font-size:19px;border:2px dashed #c9b98a;border-radius:9px;background:none;color:#35424a;cursor:pointer}
+#gmenu .adm:hover{border-color:#e0692a;color:#e0692a}
+#gmenu .tog{display:flex;align-items:center;gap:12px;margin:16px 0 2px;cursor:pointer}
+#gmenu .tog input{width:22px;height:22px;accent-color:#e0692a;cursor:pointer;flex:none}
+#gmenu .note{margin:2px 0 0 34px;font-size:16px;color:#7a8a8f}`;
   let root = null;
   function build() {
     if (root) return;
@@ -81,7 +87,7 @@
       leaveArmed = performance.now(); b.classList.add('armed'); b.textContent = 'Click again to leave';
       setTimeout(() => { if (performance.now() - leaveArmed >= 2900) { b.classList.remove('armed'); b.innerHTML = '&larr; Main menu'; } }, 3000);
     };
-    root.querySelector('#gmSet').onclick = () => { view = view === 'settings' ? 'pages' : 'settings'; render(); };
+    root.querySelector('#gmSet').onclick = () => { view = view === 'admin' ? 'settings' : view === 'settings' ? 'pages' : 'settings'; render(); };
     root.querySelector('#gmHub').onclick = () => {
       const b = root.querySelector('#gmHub');
       if (!hubSeen()) { b.classList.remove('no'); void b.offsetWidth; b.classList.add('no'); return; }
@@ -89,19 +95,33 @@
       location.href = 'hub.html';
     };
   }
-  const hubSeen = () => !!(window.SCF_SAVE && (SCF_SAVE.get('hubSeen') || SCF_SAVE.get('pcPower')));
+  const hubSeen = () => !!(window.SCF_SAVE && (SCF_SAVE.get('hubSeen') || SCF_SAVE.get('pcPower') || SCF_SAVE.get('allLevels')));
   function hubButton() {
     const b = root.querySelector('#gmHub'), ok = hubSeen();
     b.classList.toggle('locked', !ok); b.innerHTML = ok ? 'Level select' : '&#x1F512; Level select';
     b.title = ok ? 'Go straight to the level-select hall' : 'Locked: you have not found the level-select hall yet';
   }
   function render() {
-    const body = root.querySelector('#gmBody'); root.querySelector('#gmSet').innerHTML = view === 'settings' ? '&larr; Back to the book' : 'Settings &#9881;';
+    const body = root.querySelector('#gmBody'); root.querySelector('#gmSet').innerHTML = view === 'admin' ? '&larr; Back to settings' : view === 'settings' ? '&larr; Back to the book' : 'Settings &#9881;';
+    if (view === 'admin') {   // acts on the save being played, not on every save
+      const on = !!(window.SCF_SAVE && SCF_SAVE.get('allLevels'));
+      body.innerHTML = '<h1>Admin settings</h1><div class="set">'
+        + '<label class="tog"><input type="checkbox" id="gmAll"' + (on ? ' checked' : '') + '> Unlock all levels</label>'
+        + '<p class="note">Only this save. The level-select hall shows every place, and Level select opens.</p></div>'
+        + '<p class="close">This save only &middot; <kbd class="gk">G</kbd> close</p>';
+      body.querySelector('#gmAll').onchange = (e) => {
+        if (window.SCF_SAVE) SCF_SAVE.set('allLevels', !!e.target.checked);
+        hubButton(); if (typeof hubRows === 'function') hubRows();   // standing in the hall: the screen changes now
+      };
+      return;
+    }
     if (view === 'settings') {
       body.innerHTML = '<h1>Settings</h1><div class="set">'
         + '<label>Mouse sensitivity <span class="v" id="gmSv"></span></label><input type="range" id="gmS" min="0.2" max="3" step="0.05">'
         + '<label>Volume <span class="v" id="gmVv"></span></label><input type="range" id="gmV" min="0" max="1" step="0.01"></div>'
+        + '<button class="adm" id="gmAdm">Admin settings &rsaquo;</button>'
         + '<p class="close">Kept for every save &middot; <kbd class="gk">G</kbd> close</p>';
+      body.querySelector('#gmAdm').onclick = () => { view = 'admin'; render(); };
       const S = body.querySelector('#gmS'), V = body.querySelector('#gmV');
       const show = () => { body.querySelector('#gmSv').textContent = (+S.value).toFixed(2) + '×'; body.querySelector('#gmVv').textContent = Math.round(V.value * 100) + '%'; };
       S.value = st.sens; V.value = st.vol; show();
