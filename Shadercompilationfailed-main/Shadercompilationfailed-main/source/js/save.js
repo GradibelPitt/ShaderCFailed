@@ -1,6 +1,7 @@
 // Saves. Every page loads this first (a plain script, before the game's own), so window.SCF_SAVE is there for all of them.
 // Everything lives in localStorage under one key (not cookies): any number of save slots, and which one is being played.
-// The main menu (index.html) makes a new slot (New Game, existing ones are kept), picks the latest (Continue) or one from the list (Load Game).
+// The main menu (index.html) makes a new slot (New Game, existing ones are kept), picks the latest (Continue) or one from the list (Load Game),
+// and deletes one from the list (after asking again).
 // A game page opened directly, without the menu, plays the slot last chosen, or the latest one, or makes a first one if there are none.
 // What a slot keeps:
 //   scene      where to pick up: 'playroom' | 'level1' | 'level2' | 'hub' (each scene writes it when it starts)
@@ -52,6 +53,7 @@
     newGame() { load(); return copy(make()); },
     select(id) { load(); if (!db.slots.some((s) => s.id === id)) return false; db.current = id; write(); return true; },
     currentId: () => (load(), db.current),
+    remove(id) { load(); const i = db.slots.findIndex((s) => s.id === id); if (i < 0) return false; db.slots.splice(i, 1); if (db.current === id) { const l = latest(); db.current = l ? l.id : null; } write(); return true; },   // for the menu's Delete (it asks first)
     pageFor: (slot) => PAGES[(slot && slot.data && slot.data.scene) || 'playroom'] || PAGES.playroom,
   };
 })();

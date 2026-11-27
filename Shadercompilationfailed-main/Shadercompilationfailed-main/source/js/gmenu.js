@@ -29,6 +29,8 @@
     }
   }
 
+  // the G key, wherever it is shown: in the handwriting it reads as a 6, so it gets a plain printed face of its own
+  { const s = document.createElement('style'); s.textContent = "kbd.gk{font-family:Verdana,Tahoma,'Segoe UI',Arial,sans-serif!important;font-weight:bold!important;font-style:normal!important;font-size:.82em!important;letter-spacing:0}"; (document.head || document.documentElement).appendChild(s); }
   /* ---------- the book ---------- */
   let pagesFn = () => [], pages = [], page = 0, open = false, view = 'pages', leaveArmed = 0;
   const hasGun = () => !!(window.SCF_SAVE && SCF_SAVE.get('gun'));
@@ -36,7 +38,7 @@
     const li = (k, t) => '<li><kbd>' + k + '</kbd> ' + t + '</li>';
     return { t: 'Controls', html: '<ul class="keys">' + li('W A S D', 'walk') + li('Shift', 'run') + li('Space', 'jump') + li('C', 'crouch')
       + li('E', 'pick up, use') + li('Mouse', 'look (click the picture first)') + (hasGun() ? li('Left click', 'size gun in hand: smaller') + li('Right click', 'size gun in hand: bigger') : '') + li('Wheel', 'switch what is in your hand')
-      + li('G', 'this book, any time') + '</ul>' };
+      + '<li><kbd class="gk">G</kbd> this book, any time</li></ul>' };
   }
   const CSS = `#gmenu{position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.35)}
 #gmenu[hidden]{display:none}
@@ -99,7 +101,7 @@
       body.innerHTML = '<h1>Settings</h1><div class="set">'
         + '<label>Mouse sensitivity <span class="v" id="gmSv"></span></label><input type="range" id="gmS" min="0.2" max="3" step="0.05">'
         + '<label>Volume <span class="v" id="gmVv"></span></label><input type="range" id="gmV" min="0" max="1" step="0.01"></div>'
-        + '<p class="close">Kept for every save &middot; <kbd>G</kbd> close</p>';
+        + '<p class="close">Kept for every save &middot; <kbd class="gk">G</kbd> close</p>';
       const S = body.querySelector('#gmS'), V = body.querySelector('#gmV');
       const show = () => { body.querySelector('#gmSv').textContent = (+S.value).toFixed(2) + '×'; body.querySelector('#gmVv').textContent = Math.round(V.value * 100) + '%'; };
       S.value = st.sens; V.value = st.vol; show();
@@ -111,7 +113,7 @@
       : '<figure class="photo" style="--r:' + [-4, 3, -2, 4, -3][page % 5] + 'deg"><i class="tape"></i><img src="' + p.img + '" alt="" draggable="false"><figcaption>' + p.cap + '</figcaption></figure><h1>' + p.t + '</h1><p>' + p.b + '</p>';
     body.innerHTML = '<section class="pg">' + inner + '</section>'
       + (pages.length > 1 ? '<nav class="turn"><span class="arr" id="gmL">&#9664;</span><span class="dots">' + pages.map((_, i) => '<i' + (i === page ? ' class="on"' : '') + '></i>').join('') + '</span><span class="arr" id="gmR">&#9654;</span></nav>' : '')
-      + '<p class="close">' + (pages.length > 1 ? '<kbd>&larr;</kbd> <kbd>&rarr;</kbd> turn the page &middot; ' : '') + '<kbd>G</kbd> close</p>';
+      + '<p class="close">' + (pages.length > 1 ? '<kbd>&larr;</kbd> <kbd>&rarr;</kbd> turn the page &middot; ' : '') + '<kbd class="gk">G</kbd> close</p>';
     const L = body.querySelector('#gmL'), R = body.querySelector('#gmR');
     if (L) L.onclick = () => turn(-1); if (R) R.onclick = () => turn(1);
   }

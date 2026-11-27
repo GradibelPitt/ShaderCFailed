@@ -920,7 +920,8 @@ let scaleK = small ? 0.42 : 1, PS, PR, H_STAND, H_CROUCH, EYE;
 function setScale(k) { scaleK = k; PS = PS0 * k; PR = 0.28 * PS; H_STAND = 1.7 * PS; H_CROUCH = 0.86 * PS; EYE = 0.1 * PS; }
 setScale(scaleK);
 const player = {
-  pos: new V3(0.55, 0.08, 2.35), vel: new V3(), yaw: 0.27, pitch: 0.0, h: H_STAND, crouch: false, onGround: false, ground: 0,
+  // you start by the welcome booklet, the room ahead of you
+  pos: new V3(-4.75, 0.08, 7.75), vel: new V3(), yaw: -0.13, pitch: 0.05, h: H_STAND, crouch: false, onGround: false, ground: 0,
   swim: false, mode: 'walk', slip: 0, bob: 0, rideCool: 0, frozen: false, blocked: 0, hop: 0, mantle: null,
 };
 const ride = { sl: null, s: 0, v: 0, heading: 0, t: 0 };
@@ -1070,7 +1071,7 @@ function stepPlayer(dt) {
     if (S.s < sl.rideStart || S.s > sl.L - 0.6) continue;
     const along = v.x * S.tx + v.z * S.tz; if (along > 0.4) { startRide(sl, S.s, along); break; }
   }
-  if (p.y < -9) { p.set(0.55, 0.3, 2.35); v.set(0, 0, 0); }
+  if (p.y < -9) { p.set(-4.75, 0.3, 7.75); v.set(0, 0, 0); }
 }
 function portalPlayer() {
   const p = player.pos, k = tunnelOf(p.x, p.y, p.z); if (k < 0) return;

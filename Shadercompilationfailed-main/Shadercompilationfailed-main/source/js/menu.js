@@ -4,7 +4,7 @@
 // lettering (the same strokes, ttlBuild in js/hub.js), and three choices:
 //   New Game   a new save slot (the existing ones are kept), starting in the playroom
 //   Continue   the save played last, where it was left
-//   Load Game  every save, to pick one
+//   Load Game  every save, to pick one (or delete one: it asks again first)
 // Saves: js/save.js. On this page the engine's own writes are switched off, so opening the menu never makes or changes a save.
 'use strict';
 function enterMenu(){
@@ -41,6 +41,8 @@ const MENU={
 #menu tr.row{cursor:pointer}#menu tr.row:hover td,#menu tr.row.sel td{background:#316ac5;color:#fff}
 #menu .empty{padding:18px;text-align:center;color:#777}
 #menu .row2{display:flex;gap:10px}#menu .row2 button.xp{justify-content:center}
+#menu button.xp.del{color:#9b1c10}#menu button.xp.del.hot{background:linear-gradient(#f27a63,#d63d22 86%,#b02a12);color:#fff;border-color:#7a1a0a}#menu button.xp.del.hot small{color:#ffe1d8}
+#menu .conf{background:#fff7d6;border:1px solid #d9b44a;padding:10px 12px;font-size:13.5px;color:#4a3a10}#menu .conf b{color:#9b1c10}
 #menu .hint{position:fixed;left:0;right:0;bottom:14px;text-align:center;color:rgba(255,255,255,.75);font-size:12px;text-shadow:0 1px 2px rgba(0,0,0,.6)}
 #menu [hidden]{display:none!important}`;
     document.head.appendChild(st);
@@ -56,7 +58,9 @@ const MENU={
     </div>
     <div class="body" id="mlist" hidden>
       <div class="list"><table><thead><tr><th>Save</th><th>Where</th><th>Moons</th><th>Last played</th></tr></thead><tbody id="mrows"></tbody></table><div class="empty" id="mempty" hidden>No saves yet. 还没有存档。</div></div>
-      <div class="row2"><button class="xp" id="mBack">Back <small>返回</small></button><button class="xp" id="mGo" disabled>Load <small>读取</small></button></div>
+      <div class="row2" id="mrow"><button class="xp" id="mBack">Back <small>返回</small></button><button class="xp del" id="mDel" disabled>Delete <small>删除</small></button><button class="xp" id="mGo" disabled>Load <small>读取</small></button></div>
+      <div class="conf" id="mconf" hidden></div>
+      <div class="row2" id="mrowc" hidden><button class="xp" id="mNo">Cancel <small>取消</small></button><button class="xp del hot" id="mYes">Delete <small>确认删除</small></button></div>
     </div>
   </div>
   <p class="hint">↑ ↓ to choose · Enter to confirm · Esc to go back</p>
@@ -64,7 +68,7 @@ const MENU={
     const $m=(id)=>document.getElementById(id),S=window.SCF_SAVE;
     const WHERE=(d)=>({playroom:'The Playroom',level1:'Checkerboard rooms · '+((d.li||0)+1),level2:'The grey stairs',hub:'The white screen'})[d.scene]||'The Playroom';
     const when=(t)=>{const d=new Date(t),p=(n)=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());};
-    let leaving=false,pick=null;
+    let leaving=false,pick=null,asking=false;
     const blip=(f,d)=>{try{if(!Snd.ctx)Snd.init();const ac=Snd.ctx;if(!ac)return;if(ac.state==='suspended')ac.resume();const t=ac.currentTime,o=ac.createOscillator(),g=ac.createGain();o.type='square';o.frequency.value=f;g.gain.setValueAtTime(0.03,t);g.gain.exponentialRampToValueAtTime(0.0001,t+d);o.connect(g);g.connect(ac.destination);o.start(t);o.stop(t+d+0.02);}catch(e){}};
     const go=(slot)=>{if(leaving)return;leaving=true;S.select(slot.id);blip(220,0.25);$m('menu').classList.add('out');
       document.body.style.transition='opacity .7s';document.body.style.opacity='0';setTimeout(()=>{location.href=S.pageFor(slot);},720);};
@@ -74,10 +78,10 @@ const MENU={
     const focusAt=(i)=>{const b=buttons();if(b.length)b[(i+b.length)%b.length].focus();};
     const showList=(on)=>{$m('mmain').hidden=on;$m('mlist').hidden=!on;$m('mwt').textContent=on?'C:\\SCF\\saves\\':'C:\\SCF\\start.exe';
       if(!on){refreshMain();focusAt(0);return;}
-      const rows=$m('mrows'),list=S.slots();rows.innerHTML='';pick=null;$m('mGo').disabled=true;$m('mempty').hidden=list.length>0;
+      ask(false);const rows=$m('mrows'),list=S.slots();rows.innerHTML='';pick=null;$m('mGo').disabled=true;$m('mDel').disabled=true;$m('mempty').hidden=list.length>0;
       for(const s of list){const tr=document.createElement('tr');tr.className='row';
         tr.innerHTML='<td>Save '+s.id+(s.id===S.currentId()?' ●':'')+'</td><td>'+WHERE(s.data)+(s.data.gun?' · size gun':'')+'</td><td>'+(s.data.moons||0)+'</td><td>'+when(s.updated)+'</td>';
-        tr.onclick=()=>{for(const r of rows.children)r.classList.remove('sel');tr.classList.add('sel');pick=s;$m('mGo').disabled=false;blip(660,0.04);};
+        tr.onclick=()=>{if(asking)return;for(const r of rows.children)r.classList.remove('sel');tr.classList.add('sel');pick=s;$m('mGo').disabled=false;$m('mDel').disabled=false;blip(660,0.04);};
         tr.ondblclick=()=>go(s);rows.appendChild(tr);}
       if(rows.firstChild)rows.firstChild.onclick();};
     $m('mNew').onclick=()=>go(S.newGame());
@@ -85,9 +89,17 @@ const MENU={
     $m('mLoad').onclick=()=>showList(true);
     $m('mBack').onclick=()=>showList(false);
     $m('mGo').onclick=()=>{if(pick)go(pick);};
+    // Delete: ask again, in the window itself, before anything is gone
+    function ask(on){asking=on&&!!pick;$m('mrow').hidden=asking;$m('mconf').hidden=!asking;$m('mrowc').hidden=!asking;
+      if(asking){$m('mconf').innerHTML='Delete <b>Save '+pick.id+'</b> &mdash; '+WHERE(pick.data)+', '+when(pick.updated)+'?<br>This cannot be undone. 删除后无法恢复。';$m('mNo').focus();blip(330,0.12);}}
+    $m('mDel').onclick=()=>{if(pick)ask(true);};
+    $m('mNo').onclick=()=>{ask(false);$m('mDel').focus();};
+    $m('mYes').onclick=()=>{if(!pick)return;const id=pick.id;S.remove(id);blip(140,0.3);showList(true);if(!S.slots().length)showList(false);};
     document.addEventListener('focusin',(e)=>{for(const b of document.querySelectorAll('#menu button.xp'))b.classList.toggle('sel',b===e.target);});
     window.addEventListener('keydown',(e)=>{
       if(leaving)return;const onList=!$m('mlist').hidden;
+      if(onList&&asking){if(e.code==='Escape'){e.preventDefault();ask(false);}else if(e.code==='Enter'){e.preventDefault();document.activeElement&&document.activeElement.click();}return;}
+      if(onList&&e.code==='Delete'&&pick){e.preventDefault();ask(true);return;}
       if(e.code==='Escape'&&onList){showList(false);return;}
       if(onList&&(e.code==='ArrowUp'||e.code==='ArrowDown')){const rows=[...$m('mrows').children];if(!rows.length)return;e.preventDefault();
         let i=rows.findIndex((r)=>r.classList.contains('sel'));i=Math.max(0,Math.min(rows.length-1,i+(e.code==='ArrowUp'?-1:1)));rows[i].onclick();rows[i].scrollIntoView({block:'nearest'});return;}
