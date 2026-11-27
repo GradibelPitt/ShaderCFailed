@@ -3,7 +3,8 @@
 // On the screen, three places to go back to, and below them every place found since (SCF_SAVE visited). Aim at one (or point at it, when the pointer is free) and click.
 // The field has no edge: walk away from the screen in any direction and, once it is lost in the haze behind you, it is ahead of you again.
 // Everything here is one full-screen shader (FS_HUB, below, kept in this file with the scene it belongs to): no geometry at all.
-// The first time you arrive, the name of the game is shown before the field is (see "the name of the game", below).
+// The first time you arrive, the name of the game is shown before the field is (see "the name of the game", below),
+// and the first time you then look at the screen, a line says the level select is open ("level select unlocked").
 'use strict';
 /* ---------- measures ---------- */
 const HP=384;               // the field repeats every HP metres; a screen stands at every crossing of that grid and only the nearest is ever seen
@@ -277,8 +278,35 @@ function ttlDraw(t){
   const a=clamp((t-TTL_IN)/1.3,0,1);c2.globalAlpha=a*a*(3-2*a);ttlPicture(c2,W,H,0,0,Math.min(t,TTL_FAIL));c2.globalAlpha=1;
 }
 function ttlOff(){HB.title=-1;if(TT.cv)TT.cv.hidden=true;}
-// only the first time in a sitting: the playroom is a page of its own, so this is kept where it outlives a change of page (and no longer than the tab)
-function ttlFirst(){try{if(sessionStorage.getItem('scf.title'))return false;sessionStorage.setItem('scf.title','1');}catch(e){if(TT.seen)return false;}TT.seen=true;return true;}
+// only the first time this save gets here: kept in the save (SCF_SAVE titleSeen), written once the name has been shown right through.
+// (It used to be kept per tab, and the main menu, whose background is this hall, used it up before a new game ever got here.)
+function ttlFirst(){return !SCF_SAVE.get('titleSeen');}
+/* ---------- level select unlocked ---------- */
+// The first time this save is out in the field (after the name of the game, with the daylight up), the first time the player turns
+// and looks at the white screen, a line comes up the way an old desktop told you something: a little yellow balloon. Once per save (SCF_SAVE lsHint).
+const LS={el:null,t:0};
+function lsShow(){
+  if(!LS.el){
+    const st=document.createElement('style');st.textContent=
+      "#lsun{position:fixed;left:50%;bottom:18%;transform:translate(-50%,8px);display:flex;align-items:center;gap:10px;padding:9px 16px 9px 11px;"+
+      "background:#ffffe1;color:#000;border:1px solid #000;border-radius:7px;box-shadow:2px 3px 0 rgba(0,0,0,.28);"+
+      "font:15px/1.2 Tahoma,Verdana,'Segoe UI',sans-serif;white-space:nowrap;pointer-events:none;z-index:9;opacity:0;transition:opacity .35s,transform .35s}"+
+      "#lsun.on{opacity:1;transform:translate(-50%,0)}"+
+      "#lsun i{flex:none;width:18px;height:18px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#9cc4ff,#1d5fd6 70%);color:#fff;"+
+      "font:bold italic 13px/18px Georgia,serif;text-align:center;box-shadow:inset 0 0 0 1px #0b3f9e}";
+    document.head.appendChild(st);
+    document.body.insertAdjacentHTML('beforeend','<div id="lsun" role="status"><i>i</i><span>Level selection option unlocked</span></div>');LS.el=$('lsun');}
+  void LS.el.offsetWidth;LS.el.classList.add('on');LS.t=4.5;
+  Snd.tone(784,0.12,'sine',0.03,0,true);Snd.tone(1175,0.22,'sine',0.026,0.1,true);
+}
+function lsOff(){LS.t=0;if(LS.el)LS.el.classList.remove('on');}
+function lsWatch(dt){
+  if(LS.t>0){LS.t-=dt;if(LS.t<=0)lsOff();}
+  if(HB.menu||HB.title>=0||HB.pick>=0||G.fade>0.25||SCF_SAVE.get('lsHint'))return;
+  // looking at the screen: the middle of the view within about 28 degrees of the middle of the screen, and the screen not lost in the haze
+  const C=cameraHub(),dx=-C.eye[0],dy=SH*0.5-C.eye[1],dz=-C.eye[2],d=Math.hypot(dx,dy,dz)||1;
+  if(d<110&&(C.F[0]*dx+C.F[1]*dy+C.F[2]*dz)/d>0.88){SCF_SAVE.set('lsHint',true);lsShow();}
+}
 /* ---------- arriving, being there, leaving ---------- */
 function enterHub(){
   SCF_SAVE.set('scene','hub');SCF_SAVE.set('hubSeen',true);hubRows(); // the G book's Level select button opens from now on
@@ -316,7 +344,7 @@ function updateHub(dt){
   const cur=locked?'':row>=0?'pointer':'default';if(cur!==HB.cur){HB.cur=cur;canvas.style.cursor=cur;} // with the pointer free you can simply point at a line
 }
 function hubGo(i){
-  windOff();ttlOff();canvas.style.cursor='';HB.cur='';G.hint=0;
+  windOff();ttlOff();lsOff();canvas.style.cursor='';HB.cur='';G.hint=0;
   const go=HUB_ROWS[i].go;
   if(go==='pool'){location.href='playroom.html';return;} // the playroom and its pool are a page of their own
   // both of the others are in the first chamber, on this same page
@@ -337,14 +365,14 @@ function hubWarp(go){
   poolPreload();hold();
 }
 function tickHub(dt){
-  if(HB.title>=0){HB.title+=dt;if(HB.title>=TTL_END)ttlOff();else ttlDraw(HB.title);}
+  if(HB.title>=0){HB.title+=dt;if(HB.title>=TTL_END){ttlOff();SCF_SAVE.set('titleSeen',true);}else ttlDraw(HB.title);}
   if(HB.title>=0)G.fade=1; // daylight waits behind the black until the name has been and gone
   else if(HB.pick<0){if(G.fade>0)G.fade=Math.max(0,G.fade-dt/2.6);} // out of the white, the way eyes take a moment in daylight
   else{HB.pt+=dt;
     const b=HB.pt<0.5?Math.floor(HB.pt*12)%2:0;if(b!==HB.blink){HB.blink=b;HB.dirty=true;}
     if(HB.pt>0.5)G.fade=Math.min(1,G.fade+dt/1.1); // and back into it
     if(G.fade>=1&&!HB.gone){HB.gone=true;hubGo(HB.pick);if(G.mode!=='hub')return true;}}
-  updateHub(dt);return true;
+  updateHub(dt);lsWatch(dt);return true;
 }
 /* ---------- what the engine asks of this scene ---------- */
 function cameraHub(){const fx=Math.sin(P.yaw),fz=Math.cos(P.yaw),cp=Math.cos(P.pitch),sp=Math.sin(P.pitch);

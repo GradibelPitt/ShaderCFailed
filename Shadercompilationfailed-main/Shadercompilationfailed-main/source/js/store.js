@@ -163,7 +163,7 @@ function shelving(bx, sides, z0, z1, depth, keeps) {
     box(Math.min(bx, front), Math.max(bx, front), SHELF_H - 0.02, SHELF_H + 0.02, z0, z1, M.metal);
   }
   for (const z of [z0, z1]) box(bx - depth, bx + depth, 0, SHELF_H + 0.03, z - 0.012, z + 0.012, M.metal);   // ends
-  const xs = sides.map((sd) => bx + sd * depth).concat([bx]); solid(Math.min(...xs) - 0.01, Math.max(...xs) + 0.01, z0, z1, 0, 99);
+  const xs = sides.map((sd) => bx + sd * depth).concat([bx]); solid(Math.min(...xs) - 0.01, Math.max(...xs) + 0.01, z0, z1, 0, CEIL);
 }
 // a sign hanging from the ceiling over an aisle
 function aisleSign(x, z, num, l1, l2) {
@@ -185,7 +185,7 @@ function aisleSign(x, z, num, l1, l2) {
 box(-0.2, 0, 0, CEIL, 0, D, M.wall, true); box(W, W + 0.2, 0, CEIL, 0, D, M.wall, true);
 box(-0.2, DOOR_X - TUBE_HW, 0, CEIL, -0.2, 0, M.wall, true); box(DOOR_X + TUBE_HW, W + 0.2, 0, CEIL, -0.2, 0, M.wall, true); box(DOOR_X - TUBE_HW, DOOR_X + TUBE_HW, TUBE_H, CEIL, -0.2, 0, M.wall);
 box(-0.2, W + 0.2, 0, 0.35, D, D + 0.2, M.wall, true); box(-0.2, W + 0.2, 1.75, CEIL, D, D + 0.2, M.wall);
-box(0, W, 0.35, 1.75, D + 0.05, D + 0.1, M.window); solid(0, W, D, D + 0.2, 0, 99);
+box(0, W, 0.35, 1.75, D + 0.05, D + 0.1, M.window); solid(0, W, D, D + 0.2, 0, CEIL);
 for (let x = 0; x <= W + 0.01; x += W / 6) box(x - 0.03, x + 0.03, 0.35, 1.75, D - 0.01, D + 0.06, M.dark);
 // the front doors and the red EXIT over them (there is no outside)
 box(3.9, 5.3, 0.02, 1.75, D - 0.03, D, M.dark); box(4.58, 4.62, 0.02, 1.75, D - 0.05, D - 0.02, M.metal);
@@ -220,7 +220,7 @@ const CASE_X = W - 0.62, CZ0 = 1.0, CZ1 = 13.6;
     for (const end = z + run; z < end && z < CZ1 - 0.08; z += w + 0.01) for (let k = 0; k < 2; k++) cgoods.push({ x: CASE_X + 0.13 + k * 0.17, y: y + h / 2, z: z + w / 2, sx: w, sy: h, sz: w, c: col.clone().offsetHSL(0, 0, (rand() - 0.5) * 0.03), lean: 0 });
     z += 0.02;
   }
-  solid(CASE_X - 0.05, W, CZ0, CZ1, 0, 99);
+  solid(CASE_X - 0.05, W, CZ0, CZ1, 0, CEIL);
 }
 // the long shelving runs (gondolas) and the wall shelving on the west side
 const SOCKET_AT = new V3(5.08, LEVELS[1], 7.05), PUMP_AT = new V3(0.24, LEVELS[0], 10.2);
@@ -229,7 +229,7 @@ shelving(4.8, [1, -1], GZ0, GZ1, 0.36, { '1:1': [SOCKET_AT.z - 0.26, SOCKET_AT.z
 shelving(2.5, [1, -1], GZ0, GZ1, 0.36);                                         // between aisles 3 and 4
 shelving(0.02, [1], 1.0, 14.6, 0.42, { '1:0': [PUMP_AT.z - 0.3, PUMP_AT.z + 0.3] });           // the west wall: seasonal, pool things
 // end caps at the front, a few tall stacks of the same thing
-for (const bx of [7.1, 4.8, 2.5]) { box(bx - 0.36, bx + 0.36, 0, 0.08, GZ1 + 0.01, GZ1 + 0.4, M.dark); solid(bx - 0.36, bx + 0.36, GZ1, GZ1 + 0.4, 0, 99); const col = new THREE.Color(pick(PALETTE));
+for (const bx of [7.1, 4.8, 2.5]) { box(bx - 0.36, bx + 0.36, 0, 0.08, GZ1 + 0.01, GZ1 + 0.4, M.dark); solid(bx - 0.36, bx + 0.36, GZ1, GZ1 + 0.4, 0, CEIL); const col = new THREE.Color(pick(PALETTE));
   for (let i = 0; i < 4; i++) for (let j = 0; j < 3; j++) goods.push({ x: bx - 0.24 + i * 0.16, y: 0.08 + 0.08 + j * 0.16, z: GZ1 + 0.2, sx: 0.15, sy: 0.15, sz: 0.3, c: col.clone().offsetHSL(0, 0, (rand() - 0.5) * 0.05), lean: 0 }); }
 // signs
 aisleSign(7.95, 4.5, '1', 'DAIRY  ·  EGGS', 'BREAD'); aisleSign(5.95, 4.5, '2', 'HOME  ·  HARDWARE', 'BATTERIES'); aisleSign(3.65, 4.5, '3', 'SNACKS  ·  DRINKS', 'CANDY'); aisleSign(1.4, 4.5, '4', 'SEASONAL  ·  POOL', 'OUTDOOR');
@@ -266,7 +266,7 @@ for (const cx of [2.2, 5.6]) {
   const h = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, Wc + 0.04, 8), std({ color: 0xc23a2a, roughness: 0.5 })); h.rotation.z = Math.PI / 2; h.position.set(0, y1 + 0.1, L + 0.12); cart.add(h);
   for (const sx of [-1, 1]) bar(sx * Wc / 2, y1, L + 0.06, sx * Wc / 2, y1 + 0.1, L + 0.12);
   for (const [x, z] of [[-1, 0.02], [1, 0.02], [-1, L - 0.04], [1, L - 0.04]]) { const wh = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.02, 12), M.rubber); wh.rotation.z = Math.PI / 2; wh.position.set(x * Wc / 2, 0.035, z); cart.add(wh); }
-  cart.position.set(3.55, 0, 8.4); cart.rotation.y = 0.5; stage.add(cart); solid(3.15, 3.95, 8.2, 9.2, 0, 99);
+  cart.position.set(3.55, 0, 8.4); cart.rotation.y = 0.5; stage.add(cart); solid(3.15, 3.95, 8.2, 9.2, 0, CEIL);
 }
 // ceiling panels on a grid; nearly all of them off
 const panels = [];
@@ -275,6 +275,271 @@ for (const x of [7.95, 5.95, 3.65, 1.4]) for (let z = 1.2; z < D - 0.5; z += 2.4
   const m = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.02, 1.18), on ? M.panelOn.clone() : M.panelOff); m.position.set(x, CEIL - 0.01, z); stage.add(m);
   panels.push({ m, on, x, z });
 }
+
+/* ------------------------------------------------------------------ */
+/* up through the ceiling: a vent, a dropping ladder, a winding duct,  */
+/* and at its far end, down through a box office's ceiling, a cinema   */
+/* ------------------------------------------------------------------ */
+// In the back corner by the EXIT, a vent in the ceiling: E opens it and an iron ladder drops. At the top, the duct is too narrow for you
+// as you are (only shrunk do you fit). It winds over the shop and on beyond its west wall, lit by a few work lamps, to a grille in its
+// floor with light coming up through it: the ceiling vent of an abandoned cinema's box office (E opens that one too, and a ladder drops).
+// The box office opens onto the lobby, and the lobby onto the one screen. The duct, the box office, the lobby and the screen are all
+// in this same scene, west of the shop (x < 0) and over it (y > CEIL), shut off from it by its walls and ceiling.
+const DUCT_Y = 2.52, DUCT_H = 0.3, DUCT_HW = 0.18, HATCH_HW = 0.15;
+const DUCT_PATH = [[0.9, 15.35], [0.9, 13.2], [2.6, 13.2], [2.6, 10.4], [0.4, 10.4], [0.4, 8.0], [-1.6, 8.0], [-1.6, 9.6], [-3.4, 9.6]];
+const BOX = { x0: -6.4, x1: -2.2, z0: 7.4, z1: 11.8, c: 2.48 };     // the box office
+const LOBBY = { x0: -12, x1: -6.4, z0: 4.0, z1: 14.0, c: 3.4 };
+const HALL = { x0: -13.5, x1: -5.0, z0: -8.5, z1: 3.85, c: 4.0 };   // the screen
+const inR = (r, x, z) => x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1;
+const cinemaCeil = (x, z) => (inR(BOX, x, z) ? BOX.c : inR(LOBBY, x, z) ? LOBBY.c : inR(HALL, x, z) ? HALL.c : 3);
+const ductMetalTex = canvasTex(256, 256, (g, w) => {
+  g.fillStyle = '#9aa1a3'; g.fillRect(0, 0, w, w);
+  for (let i = 0; i < 2600; i++) { const v = 140 + Math.random() * 40 | 0; g.fillStyle = `rgba(${v},${v + 4},${v + 6},0.25)`; g.fillRect(Math.random() * w, Math.random() * w, 1 + Math.random() * 3, 1); }   // the spangle of galvanised steel
+  g.fillStyle = 'rgba(60,64,66,0.55)'; g.fillRect(0, 0, w, 3); g.fillRect(0, w / 2, w, 2);                                           // seams
+  g.fillStyle = 'rgba(40,42,44,0.7)'; for (let x = 8; x < w; x += 24) { g.beginPath(); g.arc(x, 7, 2, 0, 7); g.fill(); g.beginPath(); g.arc(x, w / 2 + 6, 2, 0, 7); g.fill(); }   // rivets
+  g.fillStyle = 'rgba(90,70,50,0.18)'; for (let i = 0; i < 6; i++) g.fillRect(Math.random() * w, Math.random() * w, 30 + Math.random() * 60, 6 + Math.random() * 16);   // old stains
+}, [3, 3]);
+const MC = {
+  duct: std({ map: ductMetalTex, color: 0xe4e8ea, roughness: 0.5, metalness: 0.3, emissive: 0xffffff, emissiveMap: ductMetalTex, emissiveIntensity: 0.16 }),   // never quite black in there
+  frame: std({ color: 0x3a3c3e, roughness: 0.5, metalness: 0.5 }),
+  seam: std({ color: 0x9aa0a2, roughness: 0.45, metalness: 0.3, emissive: 0x202224 }),
+  iron: std({ color: 0x55575a, roughness: 0.45, metalness: 0.7 }),
+  boWall: std({ color: 0x8a8270, roughness: 0.9 }),
+  boFloor: std({ map: canvasTex(256, 256, (g, w) => { g.fillStyle = '#6b6658'; g.fillRect(0, 0, w, w); for (let x = 0; x < w; x += 64) for (let y = 0; y < w; y += 64) { g.fillStyle = ((x + y) / 64) % 2 ? '#77715f' : '#5f5a4d'; g.fillRect(x, y, 64, 64); } g.fillStyle = 'rgba(0,0,0,0.12)'; for (let i = 0; i < 40; i++) g.fillRect(Math.random() * w, Math.random() * w, 20 + Math.random() * 50, 3); }, [6, 6]), roughness: 0.75 }),
+  carpet: std({ map: canvasTex(256, 256, (g, w) => {
+    g.fillStyle = '#3a0d14'; g.fillRect(0, 0, w, w);
+    g.strokeStyle = '#7a5a1e'; g.lineWidth = 3; for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { const cx = i * 64 + 32, cy = j * 64 + 32; g.beginPath(); g.moveTo(cx, cy - 22); g.lineTo(cx + 22, cy); g.lineTo(cx, cy + 22); g.lineTo(cx - 22, cy); g.closePath(); g.stroke(); }
+    g.fillStyle = '#1f5c5a'; for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { g.beginPath(); g.arc(i * 64 + 32, j * 64 + 32, 6, 0, 7); g.fill(); g.beginPath(); g.arc(i * 64, j * 64, 4, 0, 7); g.fill(); }
+    for (let i = 0; i < 900; i++) { g.fillStyle = `rgba(0,0,0,${Math.random() * 0.25})`; g.fillRect(Math.random() * w, Math.random() * w, 2, 2); }
+  }, [5, 5]), roughness: 0.97 }),
+  maroon: std({ color: 0x4a1c22, roughness: 0.85 }),
+  gold: std({ color: 0x9a7a3a, roughness: 0.45, metalness: 0.6 }),
+  fabric: std({ color: 0x1e1a22, roughness: 0.98 }),
+  velvet: std({ color: 0x6a1420, roughness: 0.9 }),
+  seatDark: std({ color: 0x241417, roughness: 0.8 }),
+  ceilDark: std({ color: 0x1a1a1d, roughness: 0.95 }),
+  glassDark: new THREE.MeshPhysicalMaterial({ color: 0x0b0f14, roughness: 0.06, metalness: 0.1, transparent: true, opacity: 0.55, depthWrite: false }),
+  ticketGlass: new THREE.MeshPhysicalMaterial({ color: 0xb8c8c6, roughness: 0.1, transparent: true, opacity: 0.18, depthWrite: false }),
+  paper: std({ color: 0xd9d2bd, roughness: 0.9 }),
+};
+MC.carpet.map.repeat.set(9, 9); MC.boFloor.map.repeat.set(4, 4); ductMetalTex.repeat.set(1, 1);
+const vbox = (x0, x1, y0, y1, z0, z1, mat) => box(x0, x1, y0, y1, z0, z1, mat, false);
+// a floor or ceiling plane over a rectangle, with an optional square hole [cx, cz, hw]
+function slab(x0, x1, z0, z1, y, mat, down, hole) {
+  const put = (a0, a1, b0, b1) => { if (a1 - a0 < 1e-3 || b1 - b0 < 1e-3) return; const m = new THREE.Mesh(new THREE.PlaneGeometry(a1 - a0, b1 - b0), mat); m.rotation.x = down ? Math.PI / 2 : -Math.PI / 2; m.position.set((a0 + a1) / 2, y, (b0 + b1) / 2); stage.add(m); };
+  if (!hole) return put(x0, x1, z0, z1);
+  const [cx, cz, hw] = hole; put(x0, cx - hw, z0, z1); put(cx + hw, x1, z0, z1); put(cx - hw, cx + hw, z0, cz - hw); put(cx - hw, cx + hw, cz + hw, z1);
+}
+// the store's own ceiling, cut round the vent (it replaces the single plane made above)
+const VENT = { x: DUCT_PATH[0][0], z: DUCT_PATH[0][1] };
+stage.children.filter((o) => o.isMesh && o.material === M.ceil).forEach((o) => stage.remove(o));
+slab(0, W, 0, D, CEIL, M.ceil, true, [VENT.x, VENT.z, HATCH_HW]);
+
+/* ---- the duct ---- */
+const ductRects = [];   // where you can be inside it: the corner squares and the straight runs between them (x0,x1,z0,z1)
+{
+  const hw = DUCT_HW, t = 0.02, y0 = DUCT_Y, y1 = DUCT_Y + DUCT_H, P = DUCT_PATH, last = P.length - 1;
+  const dirOf = (a, b) => [Math.sign(b[0] - a[0]), Math.sign(b[1] - a[1])];
+  const piece = (x0, x1, z0, z1, hole) => {   // floor (with the hatch hole, if any) and ceiling over one rectangle; the floor is solid
+    if (hole) { const [cx, cz] = hole, h = HATCH_HW; vbox(x0, x1, y0 - t, y0, z0, cz - h, MC.duct); vbox(x0, x1, y0 - t, y0, cz + h, z1, MC.duct); vbox(x0, cx - h, y0 - t, y0, cz - h, cz + h, MC.duct); vbox(cx + h, x1, y0 - t, y0, cz - h, cz + h, MC.duct); }
+    else vbox(x0, x1, y0 - t, y0, z0, z1, MC.duct);
+    vbox(x0, x1, y1, y1 + t, z0, z1, MC.duct); solid(x0, x1, z0, z1, y0 - t, y0);
+  };
+  for (let i = 0; i <= last; i++) {
+    const [cx, cz] = P[i], open = new Set();
+    if (i > 0) open.add(dirOf(P[i], P[i - 1]).join()); if (i < last) open.add(dirOf(P[i], P[i + 1]).join());
+    piece(cx - hw, cx + hw, cz - hw, cz + hw, i === 0 || i === last ? [cx, cz] : null);
+    if (i < last) { const [nx, nz] = P[i + 1]; ductRects.push({ x0: Math.min(cx, nx) - hw, x1: Math.max(cx, nx) + hw, z0: Math.min(cz, nz) - hw, z1: Math.max(cz, nz) + hw }); }   // where you can be: each run from corner to corner, overlapping at the corners
+    if (!open.has('1,0')) vbox(cx + hw, cx + hw + t, y0 - t, y1 + t, cz - hw - t, cz + hw + t, MC.duct);
+    if (!open.has('-1,0')) vbox(cx - hw - t, cx - hw, y0 - t, y1 + t, cz - hw - t, cz + hw + t, MC.duct);
+    if (!open.has('0,1')) vbox(cx - hw - t, cx + hw + t, y0 - t, y1 + t, cz + hw, cz + hw + t, MC.duct);
+    if (!open.has('0,-1')) vbox(cx - hw - t, cx + hw + t, y0 - t, y1 + t, cz - hw - t, cz - hw, MC.duct);
+    if (i < last) {
+      const [dx, dz] = dirOf(P[i], P[i + 1]), [nx, nz] = P[i + 1];
+      if (dx) { const a = Math.min(cx, nx) + hw, b = Math.max(cx, nx) - hw; piece(a, b, cz - hw, cz + hw); vbox(a, b, y0 - t, y1 + t, cz - hw - t, cz - hw, MC.duct); vbox(a, b, y0 - t, y1 + t, cz + hw, cz + hw + t, MC.duct);
+        for (let x = a + 0.6; x < b; x += 0.6) for (const s of [-1, 1]) vbox(x - 0.006, x + 0.006, y0, y1, cz + s * (hw - 0.003) - 0.003, cz + s * (hw - 0.003) + 0.003, MC.seam); }   // seam bands
+      else { const a = Math.min(cz, nz) + hw, b = Math.max(cz, nz) - hw; piece(cx - hw, cx + hw, a, b); vbox(cx - hw - t, cx - hw, y0 - t, y1 + t, a, b, MC.duct); vbox(cx + hw, cx + hw + t, y0 - t, y1 + t, a, b, MC.duct);
+        for (let z = a + 0.6; z < b; z += 0.6) for (const s of [-1, 1]) vbox(cx + s * (hw - 0.003) - 0.003, cx + s * (hw - 0.003) + 0.003, y0, y1, z - 0.006, z + 0.006, MC.seam); }
+    }
+  }
+  // the short square shafts down from the duct floor through the ceilings below (the shop's, and the box office's at the far end)
+  for (const [sx, sz, yb] of [[P[0][0], P[0][1], CEIL], [P[last][0], P[last][1], 2.48]]) { const h = HATCH_HW;
+    vbox(sx - h - t, sx - h, yb, y0, sz - h, sz + h, MC.duct); vbox(sx + h, sx + h + t, yb, y0, sz - h, sz + h, MC.duct);
+    vbox(sx - h - t, sx + h + t, yb, y0, sz - h - t, sz - h, MC.duct); vbox(sx - h - t, sx + h + t, yb, y0, sz + h, sz + h + t, MC.duct); }
+  // work lamps: little caged bulbs clipped to the duct roof, so the metal can be seen all the way along
+  const bulbM = std({ color: 0xffffff, emissive: 0xffe2b0, emissiveIntensity: 2.2 });
+  for (const [x, z, k] of [[0.9, 14.2, 1.0], [1.7, 13.2, 0.8], [2.6, 11.6, 0.95], [1.5, 10.4, 0.85], [0.4, 9.0, 0.85], [-0.6, 8.0, 0.8], [-1.6, 9.0, 0.7]]) {
+    const b = new THREE.Mesh(new THREE.SphereGeometry(0.018, 10, 8), bulbM); b.position.set(x, y1 - 0.03, z); stage.add(b);
+    const cage = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.04, 8, 1, true), new THREE.MeshStandardMaterial({ color: 0x2b2b2b, wireframe: true })); cage.position.copy(b.position); stage.add(cage);
+    const l = new THREE.PointLight(0xffd8a8, k, 3.2, 1.2); l.position.copy(b.position); stage.add(l);
+  }
+}
+function inDuctRects(x, z, r) { for (const R of ductRects) if (x >= R.x0 + r - 1e-6 && x <= R.x1 - r + 1e-6 && z >= R.z0 + r - 1e-6 && z <= R.z1 - r + 1e-6) return true; return false; }
+function clampToDuct(p, r) {   // the duct's walls, for whoever is in it: back to the nearest point you can be at
+  if (inDuctRects(p.x, p.z, r)) return;
+  let bx = p.x, bz = p.z, bd = 1e9;
+  for (const R of ductRects) { const x = clamp(p.x, R.x0 + r, R.x1 - r), z = clamp(p.z, R.z0 + r, R.z1 - r), d = (x - p.x) ** 2 + (z - p.z) ** 2; if (d < bd) { bd = d; bx = x; bz = z; } }
+  const dx = bx - p.x, dz = bz - p.z, l = Math.hypot(dx, dz); p.x = bx; p.z = bz;
+  if (l > 1e-6) { const v = player.vel, vn = (v.x * dx + v.z * dz) / l; if (vn < 0) { v.x -= vn * dx / l; v.z -= vn * dz / l; } }
+}
+
+/* ---- the cinema ---- */
+// walls of a room with gaps: each gap [a0, a1, y0, y1] along the wall (y1 = top of the gap)
+function wallX(x, z0, z1, top, mat, gaps = [], th = 0.15) {   // a wall along z at x
+  let z = z0; const gs = gaps.slice().sort((a, b) => a[0] - b[0]);
+  for (const [a, b, y0, y1] of gs) { if (a > z) box(x - th / 2, x + th / 2, 0, top, z, a, mat, true); if (y0 > 0) box(x - th / 2, x + th / 2, 0, y0, a, b, mat, true); if (y1 < top) box(x - th / 2, x + th / 2, y1, top, a, b, mat, y0 > 0); z = b; }
+  if (z < z1) box(x - th / 2, x + th / 2, 0, top, z, z1, mat, true);
+}
+function wallZ(z, x0, x1, top, mat, gaps = [], th = 0.15) {   // a wall along x at z
+  let x = x0; const gs = gaps.slice().sort((a, b) => a[0] - b[0]);
+  for (const [a, b, y0, y1] of gs) { if (a > x) box(x, a, 0, top, z - th / 2, z + th / 2, mat, true); if (y0 > 0) box(a, b, 0, y0, z - th / 2, z + th / 2, mat, true); if (y1 < top) box(a, b, y1, top, z - th / 2, z + th / 2, mat, y0 > 0); x = b; }
+  if (x < x1) box(x, x1, 0, top, z - th / 2, z + th / 2, mat, true);
+}
+const HATCH2 = { x: DUCT_PATH[DUCT_PATH.length - 1][0], z: DUCT_PATH[DUCT_PATH.length - 1][1] };
+// -- box office: beige walls, linoleum, a counter under the ticket windows, one hanging lamp that cannot hold steady
+slab(BOX.x0, BOX.x1, BOX.z0, BOX.z1, 0.002, MC.boFloor, false);
+slab(BOX.x0, BOX.x1, BOX.z0, BOX.z1, BOX.c, M.ceil, true, [HATCH2.x, HATCH2.z, HATCH_HW]);
+wallX(BOX.x1, BOX.z0, BOX.z1, BOX.c, MC.boWall);
+wallZ(BOX.z0, BOX.x0, BOX.x1, BOX.c, MC.boWall); wallZ(BOX.z1, BOX.x0, BOX.x1, BOX.c, MC.boWall);
+wallX(BOX.x0, BOX.z0, BOX.z1, BOX.c, MC.boWall, [[7.8, 8.6, 0, 1.6], [9.4, 11.4, 0.72, 1.42]]);   // the door out, and the ticket windows
+box(BOX.x0 - 0.01, BOX.x0 + 0.01, 0.72, 1.42, 9.4, 11.4, MC.ticketGlass);
+for (const z of [10.06, 10.73]) vbox(BOX.x0 - 0.03, BOX.x0 + 0.03, 0.72, 1.42, z - 0.025, z + 0.025, MC.frame);
+for (const zc of [9.73, 10.4, 11.07]) { const m = new THREE.Mesh(new THREE.CircleGeometry(0.05, 16), MC.frame); m.position.set(BOX.x0 + 0.012, 1.08, zc); m.rotation.y = Math.PI / 2; stage.add(m); }   // speaking holes
+{ const t = signTex(['TICKETS'], '#2a1410', '#e8c46a', 512, 128); const m = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.3), std({ map: t, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 0.18 })); m.position.set(BOX.x0 - 0.09, 1.7, 10.4); m.rotation.y = -Math.PI / 2; stage.add(m); }
+box(BOX.x0 + 0.08, BOX.x0 + 0.62, 0, 0.66, 9.2, 11.6, MC.boWall, true); vbox(BOX.x0 + 0.06, BOX.x0 + 0.66, 0.66, 0.7, 9.18, 11.62, MC.frame);   // the counter
+vbox(BOX.x0 + 0.2, BOX.x0 + 0.5, 0.7, 0.9, 10.2, 10.6, std({ color: 0x3a3836, roughness: 0.5, metalness: 0.3 }));   // the till
+vbox(BOX.x0 + 0.22, BOX.x0 + 0.48, 0.9, 0.98, 10.28, 10.52, std({ color: 0x1a2a20, emissive: 0x1a3a22, emissiveIntensity: 0.5 }));
+{ const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.1, 16), std({ color: 0xc94a3a, roughness: 0.7 })); roll.rotation.z = Math.PI / 2; roll.position.set(BOX.x0 + 0.35, 0.76, 9.6); stage.add(roll); }   // a roll of tickets
+for (let i = 0; i < 14; i++) { const m = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 0.05), MC.paper); m.rotation.x = -Math.PI / 2; m.rotation.z = rand() * 6; m.position.set(BOX.x0 + 0.8 + rand() * 2.6, 0.004 + i * 0.0003, 8.0 + rand() * 3.4); stage.add(m); }   // torn stubs on the floor
+{ const st = new THREE.Group(); const seat = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.04, 16), MC.velvet); seat.position.y = 0.52; st.add(seat); const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.02, 0.5, 8), MC.iron); leg.position.y = 0.26; st.add(leg); st.position.set(BOX.x0 + 1.0, 0, 10.9); st.rotation.z = 1.45; st.position.y = 0.14; stage.add(st); }   // the stool, knocked over
+vbox(BOX.x1 - 0.5, BOX.x1 - 0.08, 0, 1.1, 10.6, 11.6, std({ color: 0x5a5c4e, roughness: 0.6, metalness: 0.4 })); solid(BOX.x1 - 0.5, BOX.x1 - 0.08, 10.6, 11.6, 0, 1.1);   // a filing cabinet
+const boLamp = { l: new THREE.PointLight(0xffc98a, 3.6, 8, 1.0), bulb: null, f: 1, next: 0 };
+{ const cord = vbox(-4.6 - 0.004, -4.6 + 0.004, 1.9, BOX.c, 9.2 - 0.004, 9.2 + 0.004, MC.frame); const shade = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.12, 16, 1, true), std({ color: 0x2e4a3a, side: THREE.DoubleSide, roughness: 0.6 })); shade.position.set(-4.6, 1.86, 9.2); stage.add(shade);
+  boLamp.bulb = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), std({ color: 0xffffff, emissive: 0xffd09a, emissiveIntensity: 2 })); boLamp.bulb.position.set(-4.6, 1.8, 9.2); stage.add(boLamp.bulb);
+  boLamp.l.position.set(-4.6, 1.76, 9.2); stage.add(boLamp.l); void cord; }
+// -- lobby: patterned carpet, maroon walls with a gold rail, the posters still up, the concession stand, the front doors chained
+slab(LOBBY.x0, LOBBY.x1, LOBBY.z0, LOBBY.z1, 0.003, MC.carpet, false); slab(LOBBY.x0, LOBBY.x1, LOBBY.z0, LOBBY.z1, LOBBY.c, MC.ceilDark, true);
+wallX(LOBBY.x0, LOBBY.z0, LOBBY.z1, LOBBY.c, MC.maroon, [[7.4, 10.6, 0.04, 2.3]]);
+box(LOBBY.x0 - 0.02, LOBBY.x0 + 0.02, 0.04, 2.3, 7.4, 10.6, MC.glassDark, true);   // the front doors: dark glass, nothing behind
+for (const z of [8.2, 9.0, 9.8]) vbox(LOBBY.x0 + 0.02, LOBBY.x0 + 0.05, 0.04, 2.3, z - 0.03, z + 0.03, MC.gold);
+for (let i = 0; i < 9; i++) { const l = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.009, 6, 12), MC.iron); l.position.set(LOBBY.x0 + 0.08, 1.05 + Math.sin(i * 0.7) * 0.05, 8.65 + i * 0.07); l.rotation.y = Math.PI / 2; l.rotation.x = i % 2 ? Math.PI / 2 : 0; stage.add(l); }   // the chain through the handles
+wallX(LOBBY.x1, LOBBY.z0, BOX.z0, LOBBY.c, MC.maroon); wallX(LOBBY.x1, BOX.z1, LOBBY.z1, LOBBY.c, MC.maroon);
+box(LOBBY.x1 - 0.075, LOBBY.x1 + 0.075, BOX.c, LOBBY.c, BOX.z0, BOX.z1, MC.maroon);   // over the box office
+wallZ(LOBBY.z1, LOBBY.x0, LOBBY.x1, LOBBY.c, MC.maroon);
+wallZ(LOBBY.z0, LOBBY.x0, LOBBY.x1, LOBBY.c, MC.maroon, [[-7.3, -6.5, 0, 2.8]]);   // the way in to the screen
+for (let k = 1; k <= 5; k++) box(-7.35, -6.45, 0, k * 0.12, 3.7, 4.0 + (6 - k) * 0.3, MC.carpet, true);   // up five steps: the doorway is level with the back row
+for (const [z0, z1, x] of [[LOBBY.z0, LOBBY.z1, LOBBY.x0 + 0.08]]) vbox(x - 0.01, x + 0.02, 0.9, 0.94, z0, z1, MC.gold);
+vbox(LOBBY.x0, LOBBY.x1, 0.9, 0.94, LOBBY.z1 - 0.09, LOBBY.z1 - 0.07, MC.gold);
+{ // posters in lightboxes, most of the tubes behind them dead
+  const titles = [['THE LONG', 'HALLWAY', '#1c2a4a', '#e9d9a8'], ['NIGHT', 'POOL', '#0f3a3a', '#a8f0e0'], ['MOON', 'STATION', '#14141c', '#d8dce8'], ['GREY', 'STAIRS', '#3a3a3a', '#f0f0f0'], ['WELCOME', 'BACK', '#5a1a1a', '#ffd88a']];
+  const spots = [[-11.0, 13.9, 0], [-9.4, 13.9, 0], [-7.8, 13.9, 0], [-11.9, 5.4, 1], [-11.9, 12.4, 1]];
+  spots.forEach(([x, z, side], i) => {
+    const [a, b, bg, fg] = titles[i], c = document.createElement('canvas'); c.width = 256; c.height = 384; const g = c.getContext('2d');
+    g.fillStyle = bg; g.fillRect(0, 0, 256, 384); const gr = g.createRadialGradient(128, 150, 10, 128, 150, 180); gr.addColorStop(0, 'rgba(255,255,255,0.18)'); gr.addColorStop(1, 'rgba(0,0,0,0.4)'); g.fillStyle = gr; g.fillRect(0, 0, 256, 384);
+    g.fillStyle = fg; g.font = 'bold 40px Georgia, serif'; g.textAlign = 'center'; g.fillText(a, 128, 270); g.fillText(b, 128, 316); g.font = '14px Georgia, serif'; g.globalAlpha = 0.6; g.fillText('COMING SOON', 128, 352); g.globalAlpha = 1;
+    g.strokeStyle = fg; g.globalAlpha = 0.5; g.lineWidth = 3; g.beginPath(); g.arc(128, 140, 60 + i * 6, 0, 7); g.stroke(); g.globalAlpha = 1;
+    for (let k = 0; k < 2200; k++) { g.fillStyle = `rgba(0,0,0,${Math.random() * 0.2})`; g.fillRect(Math.random() * 256, Math.random() * 384, 2, 2); }
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+    const lit = i === 2 ? 0.9 : 0.3, m = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.93), std({ map: t, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: lit, roughness: 0.4 }));
+    if (side) { m.position.set(x + 0.06, 1.35, z); m.rotation.y = Math.PI / 2; vbox(x - 0.02, x + 0.05, 0.84, 1.86, z - 0.37, z + 0.37, MC.gold); }
+    else { m.position.set(x, 1.35, z - 0.06); m.rotation.y = Math.PI; vbox(x - 0.37, x + 0.37, 0.84, 1.86, z - 0.05, z + 0.02, MC.gold); }
+    stage.add(m);
+  });
+}
+{ // the concession stand, the popcorn machine on it still half full
+  box(-11.4, -8.8, 0, 0.95, 12.3, 13.1, MC.maroon, true); vbox(-11.45, -8.75, 0.95, 0.99, 12.25, 13.15, MC.gold);
+  vbox(-11.38, -8.82, 0.1, 0.85, 12.28, 12.3, MC.glassDark);
+  const pm = new THREE.Group(), red = std({ color: 0xa8241e, roughness: 0.5 });
+  const base = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.18, 0.4), red); base.position.y = 0.09; pm.add(base);
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.4), MC.ticketGlass); cab.position.y = 0.43; pm.add(cab);
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.1, 0.44), red); roof.position.y = 0.73; pm.add(roof);
+  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.5, 0.02), MC.gold); p.position.set(sx * 0.24, 0.43, sz * 0.19); pm.add(p); }
+  const corn = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.14, 0.36), std({ color: 0xe8d28a, roughness: 0.95 })); corn.position.y = 0.25; pm.add(corn);
+  pm.position.set(-10.5, 0.99, 12.7); stage.add(pm);
+  { const t = signTex(['POPCORN · SODA · CANDY'], '#3a0d14', '#e8c46a', 1024, 96); const m = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 0.2), std({ map: t, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 0.12 })); m.position.set(-10.1, 2.3, 13.86); m.rotation.y = Math.PI; stage.add(m); }
+}
+for (const [x, z] of [[-7.9, 4.6], [-7.9, 5.6], [-5.95 - 0.9, 5.6]]) { vbox(x - 0.02, x + 0.02, 0, 0.62, z - 0.02, z + 0.02, MC.gold); const b = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), MC.gold); b.position.set(x, 0.64, z); stage.add(b); solid(x - 0.04, x + 0.04, z - 0.04, z + 0.04, 0, 0.66); }   // stanchions
+{ const rope = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new V3(-7.9, 0.6, 4.6), new V3(-7.9, 0.42, 5.1), new V3(-7.9, 0.6, 5.6)]), 12, 0.012, 6), MC.velvet); stage.add(rope); }
+{ const t = signTex(['SCREEN 1'], '#1a0a0c', '#e8c46a', 512, 128); const m = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.2), std({ map: t, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 0.4 })); m.position.set(-6.9, 2.45, LOBBY.z0 + 0.09); stage.add(m); }
+const lobbyLamp = new THREE.PointLight(0xffb070, 6.0, 12, 1.0); lobbyLamp.position.set(-9.4, 2.6, 8.5); stage.add(lobbyLamp);
+{ const l2 = new THREE.PointLight(0xffa860, 3.0, 8, 1.0); l2.position.set(-7.6, 2.5, 5.0); stage.add(l2); const l3 = new THREE.PointLight(0xffd0a0, 2.5, 6, 1.0); l3.position.set(-10.1, 2.0, 12.6); stage.add(l3); }   // a sconce by the stairs to the screen; the concession stand's own light
+{ const sc = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 0.16, 12, 1, true), std({ color: 0xffe0b0, emissive: 0xffc070, emissiveIntensity: 0.9, side: THREE.DoubleSide })); sc.position.set(-9.4, 2.62, 8.5); stage.add(sc); }
+// -- the screen: dark fabric walls, rows of red seats stepping up to the back, the screen still faintly lit by nothing
+slab(HALL.x0, HALL.x1, HALL.z0, HALL.z1, 0.003, MC.carpet, false); slab(HALL.x0, HALL.x1, HALL.z0, HALL.z1, HALL.c, MC.ceilDark, true);
+wallX(HALL.x0, HALL.z0, HALL.z1, HALL.c, MC.fabric); wallX(HALL.x1, HALL.z0, HALL.z1, HALL.c, MC.fabric);
+wallZ(HALL.z0, HALL.x0, HALL.x1, HALL.c, MC.fabric);
+wallZ(HALL.z1, HALL.x0, HALL.x1, HALL.c, MC.fabric, [[-7.3, -6.5, 0, 2.8], [-9.6, -9.0, 3.1, 3.5]]);   // the door in, and the projection window
+box(-9.6, -9.0, 3.1, 3.5, HALL.z1 - 0.01, HALL.z1 + 0.01, MC.glassDark);
+box(HALL.x0, HALL.x1, 0, 0.32, HALL.z0, -7.0, MC.fabric, true);   // the low stage under the screen
+const ROWS = 6, ROW0 = -3.8, ROWD = 1.05, RISE = 0.12;
+for (let k = 1; k < ROWS; k++) box(HALL.x0, HALL.x1, 0, k * RISE, ROW0 + k * ROWD - 0.5, HALL.z1, MC.carpet, true);   // the tiers: each step one rise higher
+{
+  const seatG = new RoundedBoxGeometry(0.4, 0.1, 0.38, 2, 0.03), backG = new RoundedBoxGeometry(0.4, 0.46, 0.08, 2, 0.03), armG = new THREE.BoxGeometry(0.05, 0.05, 0.4);
+  const seats = [], backs = [], arms = [];
+  for (let k = 0; k < ROWS; k++) {
+    const y = k * RISE, z = ROW0 + k * ROWD;
+    for (let x = -12.9; x < -7.5; x += 0.46) {
+      if (rand() < 0.04) continue;   // a seat or two gone
+      const up = rand() < 0.3;   // some folded up
+      seats.push([x + 0.2, y + (up ? 0.42 : 0.3), z + (up ? 0.12 : 0), up ? 1.2 : 0]); backs.push([x + 0.2, y + 0.58, z + 0.2, -0.12 + (rand() - 0.5) * 0.06]); arms.push([x - 0.01, y + 0.45, z]);
+    }
+    arms.push([-7.5, y + 0.45, z]);
+    solid(-12.95, -7.45, z - 0.22, z + 0.26, y, y + 0.82);
+  }
+  const inst = (geo, mat, list, rotAxis) => { const im = new THREE.InstancedMesh(geo, mat, list.length), o = new THREE.Object3D(); list.forEach((s, i) => { o.position.set(s[0], s[1], s[2]); o.rotation.set(rotAxis && s[3] ? s[3] : 0, 0, 0); o.updateMatrix(); im.setMatrixAt(i, o.matrix); }); stage.add(im); };
+  inst(seatG, MC.velvet, seats, true); inst(backG, MC.velvet, backs, true); inst(armG, MC.seatDark, arms);
+  // a light in the riser of each step of the aisle
+  const stepM = std({ color: 0x000000, emissive: 0xffb060, emissiveIntensity: 2.4 });
+  for (const [x, z] of [[-11.5, -1.5], [-8.5, -1.5], [-10, 2.5]]) { const hl = new THREE.PointLight(0xd8b088, 4.0, 13, 1.0); hl.position.set(x, HALL.c - 0.3, z); stage.add(hl); }   // the house lights, left on low
+  for (let k = 1; k < ROWS; k++) { const m = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.025, 0.01), stepM); m.position.set(-7.1, k * RISE - 0.05, ROW0 + k * ROWD - 0.505); stage.add(m); }
+}
+// the screen, and the dust in the beam that is still coming from the projection window though nothing is showing
+const SCR = { w: 6.4, h: 2.8, y: 2.1, z: HALL.z0 + 0.12, x: -9.25 };
+const scrCv = document.createElement('canvas'); scrCv.width = 128; scrCv.height = 64; const scrG = scrCv.getContext('2d');
+const scrTex = new THREE.CanvasTexture(scrCv); scrTex.colorSpace = THREE.SRGBColorSpace;
+function paintScreen() { const id = scrG.createImageData(128, 64), d = id.data; const b = 150 + Math.random() * 40; for (let i = 0; i < d.length; i += 4) { const n = b + (Math.random() - 0.5) * 90; d[i] = n * 0.86; d[i + 1] = n * 0.92; d[i + 2] = n; d[i + 3] = 255; } scrG.putImageData(id, 0, 0); scrTex.needsUpdate = true; }
+paintScreen();
+{
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(SCR.w, SCR.h), new THREE.MeshBasicMaterial({ map: scrTex, color: 0xc8d0dc })); m.position.set(SCR.x, SCR.y, SCR.z); stage.add(m);
+  vbox(SCR.x - SCR.w / 2 - 0.25, SCR.x + SCR.w / 2 + 0.25, SCR.y - SCR.h / 2 - 0.12, SCR.y + SCR.h / 2 + 0.12, SCR.z - 0.06, SCR.z - 0.01, std({ color: 0x050505, roughness: 1 }));   // the black masking round it
+  for (const s of [-1, 1]) vbox(SCR.x + s * (SCR.w / 2 + 0.6) - 0.3, SCR.x + s * (SCR.w / 2 + 0.6) + 0.3, 0.32, HALL.c - 0.2, HALL.z0 + 0.05, HALL.z0 + 0.3, MC.velvet);   // the curtains, drawn back
+  const beamG = new THREE.BufferGeometry(), A = [-9.3, 3.3, HALL.z1 - 0.02], hw = SCR.w / 2, hh = SCR.h / 2;
+  const C = [[SCR.x - hw, SCR.y - hh, SCR.z + 0.02], [SCR.x + hw, SCR.y - hh, SCR.z + 0.02], [SCR.x + hw, SCR.y + hh, SCR.z + 0.02], [SCR.x - hw, SCR.y + hh, SCR.z + 0.02]];
+  const pos = []; for (let i = 0; i < 4; i++) pos.push(...A, ...C[i], ...C[(i + 1) % 4]); beamG.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  stage.add(new THREE.Mesh(beamG, new THREE.MeshBasicMaterial({ color: 0x8090a8, transparent: true, opacity: 0.06, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })));
+}
+const scrLight = new THREE.RectAreaLight(0xb8c8e0, 2.6, SCR.w, SCR.h); scrLight.position.set(SCR.x, SCR.y, SCR.z + 0.05); scrLight.lookAt(SCR.x, SCR.y, 0); stage.add(scrLight);
+{ const t = signTex(['EXIT'], '#160304', '#ff3a2e', 256, 96); const m = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.16), std({ color: 0x000000, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 2.2 })); m.position.set(-6.9, 2.4, HALL.z1 - 0.09); m.rotation.y = Math.PI; stage.add(m);
+  const l = new THREE.PointLight(0xff2a1e, 0.35, 4, 2); l.position.set(-6.9, 2.3, HALL.z1 - 0.4); stage.add(l); }
+
+/* ---- the two vents, each with its grille and its ladder ---- */
+// grille: slats you can see light through, hinged on one edge; ladder: an iron ladder that drops out of the opening to the floor below
+const slatTex = canvasTex(128, 128, (g, w) => { g.clearRect(0, 0, w, w); g.fillStyle = '#c9cdcf'; g.fillRect(0, 0, w, 10); g.fillRect(0, w - 10, w, 10); g.fillRect(0, 0, 10, w); g.fillRect(w - 10, 0, 10, w); for (let y = 18; y < w - 12; y += 14) g.fillRect(10, y, w - 20, 7); });
+slatTex.wrapS = slatTex.wrapT = THREE.ClampToEdgeWrapping; slatTex.repeat.set(1, 1);
+const hatches = [];
+function makeHatch(id, x, z, ceilY, floorY, n, ductYaw, saveKey) {
+  const h = HATCH_HW, H = { id, x, z, ceilY, floorY, n, ductYaw, saveKey, open: !!(window.SCF_SAVE && window.SCF_SAVE.get(saveKey)), t: 0, lt: 0 };
+  H.t = H.lt = H.open ? 1 : 0;
+  vbox(x - h - 0.03, x + h + 0.03, ceilY - 0.012, ceilY - 0.002, z - h - 0.03, z - h, MC.frame); vbox(x - h - 0.03, x + h + 0.03, ceilY - 0.012, ceilY - 0.002, z + h, z + h + 0.03, MC.frame);
+  vbox(x - h - 0.03, x - h, ceilY - 0.012, ceilY - 0.002, z - h, z + h, MC.frame); vbox(x + h, x + h + 0.03, ceilY - 0.012, ceilY - 0.002, z - h, z + h, MC.frame);
+  H.pivot = new THREE.Group(); H.pivot.position.set(x - h, ceilY - 0.006, z); stage.add(H.pivot);
+  const gr = new THREE.Mesh(new THREE.PlaneGeometry(2 * h, 2 * h), std({ map: slatTex, alphaTest: 0.5, side: THREE.DoubleSide, color: 0xa8adb0, roughness: 0.45, metalness: 0.6 }));
+  gr.rotation.x = -Math.PI / 2; gr.position.x = h; H.pivot.add(gr);
+  // the ladder
+  const len = ceilY - floorY, L = new THREE.Group(), rw = 0.11;
+  for (const s of [-1, 1]) { const r = new THREE.Mesh(new THREE.BoxGeometry(0.018, len, 0.026), MC.iron); r.position.set(s * rw, len / 2, 0); L.add(r); }
+  for (let y = 0.16; y < len - 0.05; y += 0.16) { const r = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 2 * rw, 6), MC.iron); r.rotation.z = Math.PI / 2; r.position.set(0, y, 0); L.add(r); }
+  L.rotation.y = Math.atan2(n[0], n[1]); L.position.set(x, floorY, z); stage.add(L); H.ladder = L; H.len = len;
+  apply(H); hatches.push(H); return H;
+}
+function apply(H) {   // grille angle and ladder drop from H.t, H.lt
+  H.pivot.rotation.z = -Math.min(1, H.t) * 1.75;
+  const e = H.lt >= 1 ? 1 : 1 - Math.pow(1 - H.lt, 3);
+  H.ladder.visible = H.lt > 0; H.ladder.position.y = H.floorY + (1 - e) * (H.len - 0.05);
+}
+const H1 = makeHatch('store', VENT.x, VENT.z, CEIL, 0, [0, -1], 0, 'storeVent');        // climb facing the EXIT wall; at the top, crawl off away from it
+const H2 = makeHatch('cinema', HATCH2.x, HATCH2.z, BOX.c, 0, [0, 1], -Math.PI / 2, 'cinemaVent');  // in the box office; at the top, crawl back east
+H1.into = [VENT.x, VENT.z - 0.36]; H2.into = [HATCH2.x + 0.36, HATCH2.z];
 
 /* ------------------------------------------------------------------ */
 /* the two things you can take                                         */
@@ -442,10 +707,10 @@ addEventListener('resize', resize);
 let small = !!(window.SCF_SAVE && window.SCF_SAVE.get('small')), scaleK = small ? 0.42 : 1, PR, H_STAND, H_CROUCH, EYE;
 function setScale(k) { scaleK = k; const PS = PS0 * k; PR = 0.28 * PS; H_STAND = 1.7 * PS; H_CROUCH = 0.86 * PS; EYE = 0.1 * PS; }
 setScale(scaleK);
-const player = { pos: new V3(), vel: new V3(), yaw: 0, pitch: 0, h: H_STAND, crouch: false, onGround: false, ground: 0, bob: 0, camY: 0 };
+const player = { pos: new V3(), vel: new V3(), yaw: 0, pitch: 0, h: H_STAND, crouch: false, onGround: false, ground: 0, bob: 0, camY: 0, mode: 'walk', lad: null };
 const keys = Object.create(null);
 let cDownAt = 0, cToggledOn = false;
-const ceilAt = (x, z) => (z < 0 ? TUBE_H : CEIL) - 0.05;
+const ceilAt = (x, z, y = 0) => (inDuctY(y) ? DUCT_Y + DUCT_H - 0.02 : x < -0.3 ? cinemaCeil(x, z) - 0.05 : (z < 0 ? TUBE_H : CEIL) - 0.05);   // the shop, the corridor, the cinema's rooms, or (up there) the duct
 function groundAt(x, z, y, reach) { let g = 0; for (const s of solids) if (x >= s.x0 && x <= s.x1 && z >= s.z0 && z <= s.z1 && s.y1 <= y + reach && s.y1 > g) g = s.y1; return g; }
 function collide() {
   const p = player.pos, v = player.vel;
@@ -469,13 +734,15 @@ function stepPlayer(dt) {
   const g = groundAt(p.x, p.z, Math.max(p.y, y0), STEP);
   if (p.y <= g || (wasOn && v.y <= 0 && p.y - g < STEP + 0.02)) { if (!wasOn && v.y < -1.5) step(0.8); p.y = g; v.y = 0; player.onGround = true; } else player.onGround = false;
   player.ground = player.onGround ? 0.12 : Math.max(0, player.ground - dt);
-  const c = ceilAt(p.x, p.z); if (p.y + player.h > c && v.y > 0) { v.y = 0; p.y = Math.max(g, c - player.h); }
+  const c = ceilAt(p.x, p.z, p.y); if (p.y + player.h > c && v.y > 0) { v.y = 0; p.y = Math.max(g, c - player.h); }
   if (player.onGround) { const b0 = player.bob; player.bob += Math.hypot(v.x, v.z) * dt; if (Math.floor(b0 * 8 / Math.PI) !== Math.floor(player.bob * 8 / Math.PI)) step(clamp(Math.hypot(v.x, v.z) / 3, 0.25, 1)); }
 }
 function updatePlayer(dt) {
   { const kt = small ? 0.42 : 1; if (scaleK !== kt) setScale(Math.abs(kt - scaleK) < dt * 1.6 ? kt : scaleK + Math.sign(kt - scaleK) * dt * 1.6); }
-  for (let i = 0; i < 4; i++) stepPlayer(dt / 4);
-  let target = player.crouch ? H_CROUCH : H_STAND; const room = ceilAt(player.pos.x, player.pos.z) - player.pos.y; if (target > room) target = Math.min(player.h, room);
+  tryMountLadder();
+  if (player.mode === 'ladder') updateLadder(dt);
+  else for (let i = 0; i < 4; i++) { stepPlayer(dt / 4); ductStep(); if (player.mode !== 'walk') break; }
+  let target = player.crouch ? H_CROUCH : H_STAND; const room = ceilAt(player.pos.x, player.pos.z, player.pos.y) - player.pos.y; if (target > room) target = Math.min(player.h, room);
   player.h += clamp(target - player.h, -2.4 * dt, 2.4 * dt);
 }
 function placeCamera(dt) {
@@ -484,10 +751,49 @@ function placeCamera(dt) {
   ey = player.camY + (player.onGround ? Math.abs(Math.sin(player.bob * 8)) * 0.009 * clamp(sp / 1.4, 0, 1.4) : 0);
   camera.position.set(p.x, ey, p.z); camera.rotation.set(player.pitch, player.yaw, 0); camera.updateMatrixWorld();
 }
+/* ---- climbing ladders, crawling the duct ---- */
+// player.mode: 'walk' or 'ladder' (on H.ladder, H = player.lad). At the top of a ladder W takes you into the duct, if you fit.
+// In the duct, step onto an open vent's opening and you are on the top of its ladder, facing it.
+let ladLock = false, narrowSaid = -9;
+const inDuctY = (y) => y > CEIL - 0.25;
+const ladSpot = (H) => [H.x + H.n[0] * 0.12, H.z + H.n[1] * 0.12];
+const ladTop = (H) => H.ceilY - player.h + 0.04;
+function mountLadder(H, y) {
+  player.mode = 'ladder'; player.lad = H; const [x, z] = ladSpot(H); player.pos.set(x, y, z); player.vel.set(0, 0, 0);
+  player.crouch = false; cToggledOn = false; player.yaw = Math.atan2(H.n[0], H.n[1]);
+}
+function tryMountLadder() {   // walk up to a ladder that is down, facing it, and keep walking: you are on it
+  if (player.mode !== 'walk' || !player.onGround || !keys.KeyW || inDuctY(player.pos.y)) return;
+  for (const H of hatches) {
+    if (H.lt < 1) continue; const [x, z] = ladSpot(H), p = player.pos;
+    if (Math.hypot(p.x - (x + H.n[0] * 0.08), p.z - (z + H.n[1] * 0.08)) > 0.2 || Math.abs(p.y - H.floorY) > 0.2) continue;
+    const fx = -Math.sin(player.yaw), fz = -Math.cos(player.yaw); if (fx * -H.n[0] + fz * -H.n[1] < 0.6) continue;
+    mountLadder(H, Math.max(p.y, H.floorY)); ladLock = false; return;
+  }
+}
+function updateLadder(dt) {
+  const H = player.lad, p = player.pos, fw = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0);
+  if (!keys.KeyW) ladLock = false;
+  const [x, z] = ladSpot(H); p.x = x; p.z = z; player.vel.set(0, 0, 0);
+  const top = ladTop(H), y0 = p.y; p.y = clamp(p.y + fw * (keys.ShiftLeft || keys.ShiftRight ? 1.3 : 0.8) * dt, H.floorY, top);
+  if (Math.floor(y0 / 0.16) !== Math.floor(p.y / 0.16)) clank(0.25);
+  player.bob += Math.abs(p.y - y0);
+  if (fw > 0 && p.y >= top - 1e-4 && !ladLock) {   // the top: into the duct, if you are small enough
+    if (scaleK > 0.5) { if (time - narrowSaid > 2.5) { narrowSaid = time; if (window.Equip) window.Equip.say('The vent is too narrow to crawl into.', 2.5); } return; }
+    player.mode = 'walk'; player.lad = null; p.set(H.into[0], DUCT_Y, H.into[1]); player.yaw = H.ductYaw; player.pitch = 0; player.onGround = true; player.ground = 0.12; return;
+  }
+  if (fw < 0 && p.y <= H.floorY + 1e-4) { player.mode = 'walk'; player.lad = null; p.x += H.n[0] * 0.2; p.z += H.n[1] * 0.2; player.onGround = true; return; }   // off the bottom, backwards
+  if (keys.Space) { player.mode = 'walk'; player.lad = null; p.x += H.n[0] * 0.14; p.z += H.n[1] * 0.14; player.vel.set(H.n[0] * 0.5, 0, H.n[1] * 0.5); player.onGround = false; }   // let go
+}
+function ductStep() {   // after each step: the duct's walls, and its open vents
+  const p = player.pos; if (!inDuctY(p.y) || player.mode !== 'walk') return;
+  clampToDuct(p, PR);
+  for (const H of hatches) if (H.lt >= 1 && Math.hypot(p.x - H.x, p.z - H.z) < HATCH_HW - PR * 0.5) { mountLadder(H, ladTop(H)); ladLock = !!keys.KeyW; return; }
+}
 window.__storeSize = {
   can(toSmall) {
     if (!on) return false; if (toSmall) return true;
-    const p = player.pos, r = 0.28 * PS0 * 0.9, h = 1.7 * PS0; if (ceilAt(p.x, p.z) - p.y < h + 0.02) return false;
+    const p = player.pos, r = 0.28 * PS0 * 0.9, h = 1.7 * PS0; if (ceilAt(p.x, p.z, p.y) - p.y < h + 0.02) return false;   // no growing in the duct
     for (const s of solids) { if (s.y1 <= p.y + 0.02 || s.y0 >= p.y + h) continue; const cx = clamp(p.x, s.x0, s.x1), cz = clamp(p.z, s.z0, s.z1); if ((p.x - cx) * (p.x - cx) + (p.z - cz) * (p.z - cz) < r * r) return false; }
     return true;
   },
@@ -518,6 +824,11 @@ function step(k) {   // a small shoe on vinyl tile
   const g = AC.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.18 * k, t + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
   s.connect(bp); bp.connect(g); g.connect(acOut); s.start(t, Math.random()); s.stop(t + 0.08);
 }
+function clank(k) {   // iron: a rung under a foot, a grille swinging, a ladder landing
+  if (!AC || AC.state !== 'running') return; const t = AC.currentTime;
+  for (const [f, a] of [[420 + Math.random() * 60, 1], [1130 + Math.random() * 90, 0.5], [2650, 0.2]]) { const o = AC.createOscillator(); o.type = 'triangle'; o.frequency.value = f; const g = AC.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.09 * k * a, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18 + 0.5 * k); o.connect(g); g.connect(acOut); o.start(t); o.stop(t + 0.8); }
+  const s = AC.createBufferSource(); s.buffer = acNoise; const bp = AC.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2400; bp.Q.value = 0.8; const g = AC.createGain(); g.gain.setValueAtTime(0.12 * k, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.08); s.connect(bp); bp.connect(g); g.connect(acOut); s.start(t, Math.random()); s.stop(t + 0.1);
+}
 function pickSound() {
   if (!AC || AC.state !== 'running') return; const t = AC.currentTime;
   for (const [f, at] of [[520, 0], [780, 0.08]]) { const o = AC.createOscillator(); o.type = 'triangle'; o.frequency.value = f; const g = AC.createGain(); g.gain.setValueAtTime(0.0001, t + at); g.gain.exponentialRampToValueAtTime(0.08, t + at + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + at + 0.25); o.connect(g); g.connect(acOut); o.start(t + at); o.stop(t + at + 0.3); }
@@ -532,7 +843,19 @@ function aimed() {   // the thing in front of you, close enough to take
   for (const P of pickups) { if (!P.g.visible) continue; _v.copy(P.at).sub(camera.position); const dist = _v.length(); if (dist > 1.1) continue; const c = _v.dot(_d) / dist; if (c > bc) { bc = c; best = P; } }
   return best;
 }
+function hatchAimed() {   // a shut vent you are looking up at from under it, or standing over in the duct
+  const c = camera.position, inD = inDuctY(player.pos.y); camera.getWorldDirection(_d);
+  for (const H of hatches) {
+    if (H.open) continue;
+    if (inD) { if (Math.hypot(player.pos.x - H.x, player.pos.z - H.z) < 0.42) return H; continue; }
+    if (c.y > H.ceilY || Math.hypot(c.x - H.x, c.z - H.z) > 1.4) continue;
+    _v.set(H.x - c.x, H.ceilY - c.y, H.z - c.z); const dist = _v.length(); if (dist < 2.8 && _v.dot(_d) / dist > 0.82) return H;
+  }
+  return null;
+}
+function openHatch(H) { H.open = true; if (window.SCF_SAVE) window.SCF_SAVE.set(H.saveKey, true); clank(0.7); }
 function interact() {
+  const Hv = hatchAimed(); if (Hv && !aimed()) { openHatch(Hv); return; }
   const P = aimed(); if (!P) return;
   P.g.visible = false; if (window.Equip) { window.Equip.add(P.id); window.Equip.say(P.got, 3.5); } pickSound();
 }
@@ -570,7 +893,7 @@ function fromPort(st) {
   p.set(P.hx + P.dx * d - P.dz * u, Math.max(0, st.y || 0), P.hz + P.dz * d + P.dx * u);
   const vs = st.vs || 0, vu = st.vu || 0; player.vel.set(P.dx * vs - P.dz * vu, st.vy || 0, P.dz * vs + P.dx * vu);
   player.yaw = P.yawIn + (st.yaw || 0); player.pitch = st.pitch || 0; player.h = Math.min(st.h || H_STAND, H_STAND); player.crouch = !!st.crouch; player.bob = st.bob || 0;
-  player.onGround = false; player.ground = 0; player.camY = p.y + player.h - EYE;
+  player.onGround = false; player.ground = 0; player.camY = p.y + player.h - EYE; player.mode = 'walk'; player.lad = null;
 }
 function leave() {
   const P = PORT, p = player.pos, v = player.vel, d = (p.x - P.hx) * P.dx + (p.z - P.hz) * P.dz, u = (p.x - P.hx) * -P.dz + (p.z - P.hz) * P.dx;
@@ -598,9 +921,9 @@ function tick(dt) {
   if (keys.ArrowLeft) player.yaw += 1.8 * dt; if (keys.ArrowRight) player.yaw -= 1.8 * dt;
   if (keys.ArrowUp) player.pitch = Math.min(1.5, player.pitch + 1.3 * dt); if (keys.ArrowDown) player.pitch = Math.max(-1.5, player.pitch - 1.3 * dt);
   updatePlayer(dt);
-  const d = (player.pos.z - PORT.hz) * PORT.dz;   // how far past the corridor's hand-over point
-  if (player.pos.z < 0 && d < -0.6) { leave(); if (!on) return -1; return (player.pos.z - PORT.hz) * PORT.dz; }
-  return player.pos.z < 0 ? d : 99;
+  const d = (player.pos.z - PORT.hz) * PORT.dz, inTube = player.pos.z < 0 && Math.abs(player.pos.x - DOOR_X) < TUBE_HW + 0.3;   // how far past the corridor's hand-over point (the cinema's screen also lies at z < 0, far to the west)
+  if (inTube && d < -0.6) { leave(); if (!on) return -1; return (player.pos.z - PORT.hz) * PORT.dz; }
+  return inTube ? d : 99;
 }
 const _p = new V3();
 function frame(now) {
@@ -617,8 +940,21 @@ function frame(now) {
     if (F.bad && buzz) buzz.gain.value = 0.012 * (F.f > 0.3 ? 1 : 0.2) * sstep(6, 1.5, Math.hypot(player.pos.x - F.p.x, player.pos.z - F.p.z));
   }
   pulsePickups(time);
-  const P = aimed();
-  if (window.Equip) { if (P) { _p.copy(P.at).project(camera); window.Equip.prompt((_p.x * 0.5 + 0.5) * innerWidth, (-_p.y * 0.5 + 0.5) * innerHeight); } else window.Equip.prompt(null); }
+  for (const H of hatches) {
+    if (!H.open || H.lt >= 1) continue;
+    H.t = Math.min(1, H.t + dt / 0.45);
+    if (H.t > 0.55) { const was = H.lt; H.lt = Math.min(1, H.lt + dt / 0.32); if (was < 1 && H.lt >= 1) clank(1); }   // the ladder comes down fast and lands with a bang
+    apply(H);
+  }
+  if (now >= boLamp.next) { const r = Math.random(); boLamp.f = r < 0.25 ? 0.1 + Math.random() * 0.3 : 0.75 + Math.random() * 0.3; boLamp.next = now + (boLamp.f < 0.5 ? 40 + Math.random() * 120 : 300 + Math.random() * 2200); }
+  boLamp.l.intensity = 3.6 * boLamp.f; boLamp.bulb.material.emissiveIntensity = 2 * boLamp.f;
+  if (player.pos.x < -0.3 && (frame.scrT = (frame.scrT || 0) + dt) > 0.08) { frame.scrT = 0; paintScreen(); scrLight.intensity = 2.2 + Math.random() * 0.8; }
+  const P = aimed(), Hv = P ? null : hatchAimed();
+  if (window.Equip) {
+    if (P) { _p.copy(P.at).project(camera); window.Equip.prompt((_p.x * 0.5 + 0.5) * innerWidth, (-_p.y * 0.5 + 0.5) * innerHeight); }
+    else if (Hv) { _p.set(Hv.x, Hv.ceilY - 0.02, Hv.z).project(camera); window.Equip.prompt((_p.x * 0.5 + 0.5) * innerWidth, (-_p.y * 0.5 + 0.5) * innerHeight); }
+    else window.Equip.prompt(null);
+  }
   grade.uniforms.uTime.value = time; since += dt; grade.uniforms.uFade.value = Math.max(1 - sstep(-0.6, -0.05, d), 1 - sstep(0, 0.5, since));   // half a second of black on arrival; dark again walking back out
   if (AC && acOut) acOut.gain.value += (sstep(-0.6, 1.2, d) * 0.9 - acOut.gain.value) * Math.min(1, dt * 6);
   composer.render();
@@ -628,7 +964,7 @@ function frame(now) {
 /* get ready                                                           */
 /* ------------------------------------------------------------------ */
 let ready = false;
-window.__store = { player, camera, keys, pickups, solids, grade, interact, get on() { return on; },
+window.__store = { player, camera, keys, pickups, solids, grade, interact, hatches, openHatch, H1, H2, get on() { return on; },
   look(x, y, z, yaw, pitch) { player.pos.set(x, y, z); player.vel.set(0, 0, 0); player.yaw = yaw; player.pitch = pitch || 0; player.camY = y + player.h - EYE; },
   sim(sec) { for (let t = 0; t < sec && on; t += 1 / 60) tick(1 / 60); const p = player.pos; return [+p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2), +player.yaw.toFixed(2)]; } };
 {
