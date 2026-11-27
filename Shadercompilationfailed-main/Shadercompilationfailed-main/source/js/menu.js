@@ -41,7 +41,7 @@ const MENU={
 #menu td{padding:6px 8px;border-bottom:1px solid #f0efe8;white-space:nowrap}
 #menu tr.row{cursor:pointer}#menu tr.row:hover td,#menu tr.row.sel td{background:#316ac5;color:#fff}
 #menu .empty{padding:18px;text-align:center;color:#777}
-#menu .row2{display:flex;gap:10px}#menu .row2 button.xp{justify-content:center}
+#menu .row2{display:flex;gap:10px}#menu .row2 button.xp{justify-content:center;white-space:nowrap;padding-left:8px;padding-right:8px;gap:8px}
 #menu button.xp.del{color:#9b1c10}#menu button.xp.del.hot{background:linear-gradient(#f27a63,#d63d22 86%,#b02a12);color:#fff;border-color:#7a1a0a}#menu button.xp.del.hot small{color:#ffe1d8}
 #menu .conf{background:#fff7d6;border:1px solid #d9b44a;padding:10px 12px;font-size:13.5px;color:#4a3a10}#menu .conf b{color:#9b1c10}
 #menu .hint{position:fixed;left:0;right:0;bottom:14px;text-align:center;color:rgba(255,255,255,.75);font-size:12px;text-shadow:0 1px 2px rgba(0,0,0,.6)}
