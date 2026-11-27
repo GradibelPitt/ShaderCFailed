@@ -509,7 +509,7 @@ const sky = new THREE.Mesh(new THREE.SphereGeometry(30000, 64, 32), new THREE.Sh
         // the band's face is built, not blank: concentric tracks with dark gaps between them, each track laid in plates of its own
         // shade, finer plates inside those, a few lamps; whatever is too small for a pixel from here is left out, so it reads as far off
         vec3 e1 = normalize(cross(Nr, vec3(0.0, 1.0, 0.0))), e2 = cross(Nr, e1), vv = rd * t - C;
-        float th = atan(dot(vv, e2), dot(vv, e1)), wd = clamp(fwidth(d) * 0.9, 3.0, 40.0), wa = fwidth(th), thin = sqrt(3.0 / wd);
+        float th = atan(dot(vv, e2), dot(vv, e1)), wd = clamp(fwidth(d) * 0.9, 3.0, 40.0), wa = fwidth(th);
         float tex = 1.0, lamp = 0.0;
         {
           float k1 = 1.0 - smoothstep(0.12, 0.45, wd / 130.0), k2 = 1.0 - smoothstep(0.12, 0.45, wd / 32.5), k3 = 1.0 - smoothstep(0.12, 0.45, wd / 8.0);
@@ -531,17 +531,6 @@ const sky = new THREE.Mesh(new THREE.SphereGeometry(30000, 64, 32), new THREE.Sh
         col = mix(col, vec3(0.055, 0.058, 0.064) * tex * (0.4 + 0.6 * max(dot(Nr, S), 0.0)), inband * 0.92);
         col += mix(vec3(1.0, 0.75, 0.45), vec3(0.6, 0.8, 1.0), step(0.5, fract(hash3(vec3(floor(th / 0.0042), 3.0, 2.0))))) * lamp * 0.4 * inband;
         col += vec3(1.0, 0.36, 0.10) * line;
-        // It is a machine, and it is running: golden pulses go round it on rails (the gaps between the great tracks), all the same way,
-        // evenly spaced on each rail like the teeth of something turning, each rail at its own steady speed; a bright head, a long tail,
-        // and the rail itself glowing faintly ahead of and behind them. Never thinner than a pixel; fainter instead.
-        for (int k = 0; k < 3; k++){
-          float fk = float(k), rail = 130.0 * (fk + 1.0), n = 7.0 + fk * 4.0, per = 6.28318 / n, sp = 0.62 + 0.21 * fk;
-          float across = exp(-abs(d - rail) / wd) * thin;
-          float dl = mod((th * 1.0) - uTime * sp + fk * 1.7, per); dl = dl > per * 0.12 ? dl - per : dl;      // from the nearest head: negative behind it
-          float along = dl < 0.0 ? exp(dl / 0.085) : exp(-dl / 0.0012);
-          float dl2 = dl + 0.03, twin = (dl2 < 0.0 ? exp(dl2 / 0.03) : exp(-dl2 / 0.0012)) * step(1.5, fk + 0.6);    // on the outer rails they come in pairs
-          col += vec3(1.0, 0.70, 0.26) * across * (along * (1.2 + 2.8 * exp(-abs(dl) / 0.0025)) + twin * 1.1 + 0.035);
-        }
       }
     }
     // small cruisers going round with the ring, a little off it, each with a bright engine and a long faint wake
