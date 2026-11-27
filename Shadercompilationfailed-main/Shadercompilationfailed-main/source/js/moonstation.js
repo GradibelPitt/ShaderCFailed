@@ -149,20 +149,131 @@ void beds(vec2 u, float T, float sd, float px){
   rTone += ((h0.y - 0.5) * 0.20 + (out0 - 1.0) * 0.12 + (hb.y - 0.5) * 0.24) * kk;
 }
 #endif
+#if KIND == 0 || KIND == 1
+// the station's side: steel plate on every scale. Each size of plate is cut into smaller ones, and those again; every plate has its seam,
+// its edges rolled down to it (lit on the side toward the open end), its own tilt, shade and polish; some carry a grille of louvres or a
+// recessed hatch, rows of bolts run along the edges, grime lies along their lower edges and has run down from the seams, and here and there
+// a tiny lamp. As with the rock, whatever is too small for a pixel from where you stand is left out, so it stays sharp at any distance.
+vec2 hh2(vec2 p){ p = mod(p, 2048.0); vec3 q = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973)); q += dot(q, q.yzx + 33.33); return fract((q.xx + q.yz) * q.zy); }
+float hh1(vec2 p){ p = mod(p, 2048.0); vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
+vec2 hG; float hTone, hDark, hRough; vec3 hLit;
+void plates(vec2 u, float T, float sd, float px){
+  float kk = 1.0 - smoothstep(0.10, 0.35, px / T); if (kk <= 0.0) return;
+  float em = mix(1.0, 0.45, smoothstep(15.0, 250.0, T / px));        // the big ones go quiet as you come close
+  vec2 cs = vec2(T * 1.7, T);                                         // plates run long, along the frames
+  vec2 q = u / cs + sd * 7.31, ci = floor(q), f = q - ci;
+  vec2 h = hh2(ci + sd * 17.0);
+  float nx = h.x < 0.45 ? 1.0 : (h.x < 0.8 ? 2.0 : 3.0), ny = h.y < 0.55 ? 1.0 : 2.0;
+  vec2 g = f * vec2(nx, ny), gi = floor(g), gf = g - gi, ps = cs / vec2(nx, ny);
+  vec2 pid = ci * 3.0 + gi + sd * 41.0;
+  vec2 d0 = gf * ps, d1 = (1.0 - gf) * ps;                            // metres to the plate's edges: below / to one side, above / the other
+  float dm = min(min(d0.x, d1.x), min(d0.y, d1.y));
+  vec2 r = hh2(pid + 3.7), r2 = hh2(pid + 19.1);
+  float e = px * 0.8;
+  // the seam (never thinner than a pixel: fainter instead)
+  float sw = T * 0.008, sx = max(sw, e);
+  hDark += kk * min(1.0, sw / sx) * (1.0 - smoothstep(sx * 0.35, sx, dm)) * 0.85;
+  // its edges rolled down to the seam, and the plate never quite flat
+  float bw = T * 0.035, fb = kk * em * (1.0 - smoothstep(0.12, 0.4, px / bw));   // only once it is a few pixels wide: thinner, it would only sparkle
+  vec2 b0 = 1.0 - smoothstep(0.0, bw, d0), b1 = 1.0 - smoothstep(0.0, bw, d1);
+  hG += (b1 * b1 - b0 * b0) * 0.9 * fb;
+  hG += (r - 0.5) * 0.07 * kk * em;
+  float tk = 1.0 - smoothstep(0.04, 0.15, px / T);                   // a plate only a few pixels across keeps its own shade to itself (no mosaic)
+  hTone += ((r2.x - 0.5) * 0.20 + (h.y - 0.5) * 0.06) * kk * em * tk;
+  hRough += (r2.y - 0.5) * 0.30 * kk * em;
+  // grime along each plate's lower edge, and streaks run down from the seam above it
+  float sk = 1.0 - smoothstep(0.15, 0.5, px / (ps.y * 0.06));
+  float st = noise3(vec3(d0.y / max(ps.y * 0.05, 1e-3), pid.x * 0.37, pid.y * 0.21));
+  hTone -= kk * em * (0.20 * (1.0 - smoothstep(0.0, ps.x * 0.22, d0.x)) + 0.22 * sk * smoothstep(0.45, 0.85, st) * (1.0 - smoothstep(0.0, ps.x * (0.3 + 0.5 * r.y), d1.x)));
+  // what some plates carry, while it can still be seen
+  float ins = T * 0.10; vec2 i0 = d0 - ins, i1 = d1 - ins; float di = min(min(i0.x, i1.x), min(i0.y, i1.y));   // inside the inset: > 0
+  float fk = kk * (1.0 - smoothstep(0.25, 0.7, px / (T * 0.03)));
+  if (fk > 0.0){
+    if (r.x < 0.11){
+      // a grille: louvres across it, each one a slat leaning out, a dark slot under it
+      float inn = smoothstep(0.0, e + T * 0.004, di), lp = T * 0.04, lk = 1.0 - smoothstep(0.10, 0.25, px / lp), lf = fract(d0.x / lp);
+      hG.x += inn * fk * lk * (0.9 - 1.8 * smoothstep(0.0, 0.85, lf)) * 0.45;
+      hDark += inn * fk * (lk * (1.0 - smoothstep(0.0, 0.3, lf)) * 0.75 + (1.0 - lk) * 0.25);
+      hDark += fk * (1.0 - smoothstep(0.0, max(T * 0.004, e), abs(di))) * 0.5;
+      hRough += inn * fk * 0.3;
+    } else if (r.x < 0.19){
+      // a hatch: the panel set back into the plate, its rim casting a line of shadow on the light's side
+      float inn = smoothstep(-e, e, di), rw = max(T * 0.012, e * 0.5);
+      vec2 w0 = 1.0 - smoothstep(0.0, rw * 1.5, i0), w1 = 1.0 - smoothstep(0.0, rw * 1.5, i1);
+      hG += inn * fk * (w0 - w1) * 0.6 * step(0.0, di) * (1.0 - smoothstep(0.15, 0.45, px / rw));
+      hDark += fk * (1.0 - smoothstep(0.0, rw, abs(di))) * 0.6;
+      hTone -= inn * fk * 0.10;
+    } else if (r.x < 0.24){
+      // a plate left darker, rougher: worn through its paint
+      hTone -= fk * 0.18; hRough += fk * 0.35;
+    }
+    // bolts in rows just in from the long edges, and the short ones
+    float bs = T * 0.06, br = T * 0.0075, bk = fk * (1.0 - smoothstep(0.5, 1.3, px / br));
+    if (bk > 0.0){
+      float off = T * 0.04;
+      float la = length(vec2(abs(fract(d0.x / bs) - 0.5) * bs, min(abs(d0.y - off), abs(d1.y - off))));
+      float lb = length(vec2(abs(fract(d0.y / bs) - 0.5) * bs, min(abs(d0.x - off), abs(d1.x - off))));
+      float bd = min(la, lb);
+      hTone += bk * (1.0 - smoothstep(br * 0.5, br, bd)) * 0.30;
+      hDark += bk * (smoothstep(br * 0.7, br, bd) - smoothstep(br, br * 1.5, bd)) * 0.35;
+    }
+  }
+  // a tiny lamp, very rarely: amber or white, some of them slowly blinking
+  if (T > 6.0 && r2.x > 0.988){
+    vec2 lc = vec2(ps.x * (0.15 + 0.7 * r.y), ps.y * (0.3 + 0.4 * r2.y)); float ls = T * 0.010, lr = max(ls, px * 0.75);
+    float on = (1.0 - smoothstep(lr * 0.55, lr, length(d0 - lc))) * (ls / lr) * (ls / lr);
+    float bl = r.x > 0.6 ? 0.25 + 0.75 * step(0.55, fract(uTime * (0.15 + 0.2 * r.y) + r.x * 7.0)) : 1.0;
+    hLit += mix(vec3(1.0, 0.55, 0.22), vec3(0.75, 0.85, 1.0), step(0.55, h.x)) * 3.2 * on * bl;
+  }
+}
+#endif
 void main(){
   #include <logdepthbuf_fragment>
   vec3 n = normalize(vN); if (dot(n, uCam - vW) < 0.0) n = -n;
   vec3 col; float glow = 0.0;
+#if KIND == 0 || KIND == 1
+  // the frames (0) and the skin between them (1): the same plate, the frames lighter and polished, the skin darker and duller
+  vec2 pl = vW.xy - vec2(${((XR + XL) / 2).toFixed(1)}, ${(TOPY / 2).toFixed(1)});
+  const vec2 SDV = vec2(${SD[0].toFixed(6)}, ${SD[1].toFixed(6)}), SNV = vec2(${SN[0].toFixed(6)}, ${SN[1].toFixed(6)});
+  float a = dot(pl, SDV), b = dot(pl, SNV);                          // along the frames (up toward the cliff), and out of the skin into the hall
+  vec3 ea = vec3(SDV, 0.0), eb; vec2 u;
+  if (abs(n.z) > 0.7){ u = vec2(a, b); eb = vec3(SNV, 0.0); } else { u = vec2(a, vW.z); eb = vec3(0.0, 0.0, 1.0); }
+  float px = length(fwidth(vW)) * 0.7 + 1e-4;
+  hG = vec2(0.0); hTone = 0.0; hDark = 0.0; hRough = 0.0; hLit = vec3(0.0);
 #if KIND == 0
-  // the frames: dark blue-grey metal, smooth, long faint seams along them
-  float s = fbm3(vW * 0.004) * 0.25;
-  vec3 alb = vec3(0.085, 0.10, 0.12) * (0.85 + s);
-  col = shade(vW, n, alb, 0.28, 1.2);
-#elif KIND == 1
-  // between the frames: the skin, darker still, in great panels
-  float g = max(lines(vW.z, 520.0, 3.0), lines(vW.y, 300.0, 2.0));
-  vec3 alb = vec3(0.028, 0.033, 0.040) * (0.8 + 0.4 * fbm3(vW * 0.002)) * (1.0 - 0.5 * g);
-  col = shade(vW, n, alb, 0.75, 0.05);
+  { float T = 150.0; for (int k = 0; k < 7; k++){ plates(u, T, float(k) * 2.0 + 1.0, px); T *= 0.36; } }
+#else
+  { float T = 260.0; for (int k = 0; k < 7; k++){ plates(u, T, float(k) * 2.0 + 21.0, px); T *= 0.36; } }
+#endif
+  // slow changes over the whole side, and long stains running down it
+  hTone += (fbm3(vW * 0.0009) - 0.5) * 0.45
+         + (noise3(vec3(u.y / 34.0, a / 1100.0, 1.0)) - 0.5) * 0.30 * (1.0 - smoothstep(0.1, 0.4, px / 34.0))
+         + (noise3(vec3(u.y / 5.0, a / 160.0, 2.0)) - 0.5) * 0.18 * (1.0 - smoothstep(0.1, 0.4, px / 5.0));
+  // close to, the grain of it
+  { float k1 = 1.0 - smoothstep(0.12, 0.4, px / 0.25); if (k1 > 0.0) hTone += (noise3(vec3(u / 0.25, 3.0)) - 0.5) * 0.16 * k1; }
+  // in the shadow of the frames: the skin close to them, and their sides close to the skin
+#if KIND == 1
+  float zr = mod(vW.z - ${(ZB - 120).toFixed(1)}, 520.0); zr = min(zr, 520.0 - zr);
+  float occ = mix(0.40, 1.0, smoothstep(150.0, 330.0, zr));
+#else
+  float occ = abs(n.z) > 0.7 ? mix(0.50, 1.0, smoothstep(-150.0, 60.0, b)) : 1.0;
+#endif
+  vec2 g = hG / (1.0 + 0.4 * length(hG));
+  vec3 ta = normalize(ea - n * dot(n, ea) + 1e-4), tb = normalize(eb - n * dot(n, eb) + 1e-4);
+  vec3 nb = normalize(n + ta * g.x + tb * g.y);
+  // where the bumps change faster than a pixel can show, the shine spreads and dims instead of breaking into sparks
+  float nv = min(length(fwidth(nb)), 1.0), sq = 1.0 / (1.0 + nv * 8.0);
+  float dk = clamp(hDark, 0.0, 1.0), tone = clamp(1.0 + hTone, 0.35, 1.8);
+#if KIND == 0
+  vec3 alb = vec3(0.085, 0.10, 0.12) * tone * (1.0 - 0.78 * dk) * occ;
+  float rg = clamp(0.32 + hRough * 0.35, 0.16, 0.75); rg = min(sqrt(rg * rg + nv * 0.8), 0.95);   // never past 1: shade() raises to a power that turns negative there
+  col = shade(vW, nb, alb, rg, 1.2 * (1.0 - 0.6 * dk) * sq);
+#else
+  vec3 alb = vec3(0.040, 0.046, 0.055) * tone * (1.0 - 0.75 * dk) * occ;
+  float rg = clamp(0.62 + hRough * 0.30, 0.30, 0.92); rg = min(sqrt(rg * rg + nv * 0.8), 0.95);   // never past 1: shade() raises to a power that turns negative there
+  col = shade(vW, nb, alb, rg, 0.30 * (1.0 - 0.6 * dk) * sq);
+#endif
+  col += hLit; glow = clamp(max(hLit.r, hLit.b), 0.0, 1.0);
 #elif KIND == 2
   // the cliff: bare dark rock. Nothing here is soft: it is broken into blocks, the blocks into smaller blocks and those again, each one
   // tilted its own way with a crack round it; it lies in beds, some of them standing out as ledges; it is worn into flutes running down it;
@@ -425,13 +536,6 @@ let blinkMat = null;
   pts(white, new THREE.Color(2.2, 2.3, 2.5), 2.0);
   blinkMat = pts(red, new THREE.Color(4, 0.35, 0.25), 2.6);
 }
-// dust in the air right round you, the one thing here at your own scale
-const dust = (() => {
-  const N = 500, a = new Float32Array(N * 3), r = mulberry32(11); for (let i = 0; i < N * 3; i++) a[i] = (r() - 0.5) * 24;
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(a, 3));
-  const m = new THREE.PointsMaterial({ color: new THREE.Color(0.55, 0.62, 0.7), size: 0.022, sizeAttenuation: true, transparent: true, opacity: 0.55, depthWrite: false });
-  const p = new THREE.Points(g, m); p.frustumCulled = false; scene.add(p); return { p, a, N };
-})();
 
 /* ---------------- the sky ---------------- */
 // worked out per pixel from the direction looked in, in kilometres: the Earth 420 km below (its upper edge about 13 degrees above level, straight
@@ -569,7 +673,7 @@ function makeRefl() {
   floorMat.uniforms.uRefl.value = refl.texture; floorMat.uniforms.uPx.value.set(1 / w, 1 / h);
 }
 makeRefl();
-let dustK = 0;   // how much of the dust in the air shows: none on foot, all of it at speed in the car
+let spdK = 0;    // how fast you are going, eased (0 standing .. 1 flat out): it drives the blur of speed in the print
 function renderMirror() {
   mirrorCam.copy(camera);
   mirrorCam.position.set(camera.position.x, -camera.position.y, camera.position.z);
@@ -578,9 +682,9 @@ function renderMirror() {
   mirrorCam.up.copy(_u); mirrorCam.lookAt(mirrorCam.position.clone().add(_f)); mirrorCam.updateMatrixWorld();
   mirrorCam.projectionMatrix.copy(camera.projectionMatrix); mirrorCam.projectionMatrixInverse.copy(camera.projectionMatrixInverse);
   uMirrorVP.value.multiplyMatrices(mirrorCam.projectionMatrix, mirrorCam.matrixWorldInverse);
-  floor.visible = false; dust.p.visible = false;
+  floor.visible = false;
   renderer.setRenderTarget(refl); renderer.clear(); renderer.render(scene, mirrorCam); renderer.setRenderTarget(null);
-  floor.visible = true; dust.p.visible = dustK > 0.01;
+  floor.visible = true;
 }
 
 /* ---------------- post ---------------- */
@@ -591,15 +695,24 @@ const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.
 composer.addPass(new OutputPass());
 // a print of it: grain, colour fringes toward the corners, darker corners, and the fade in when you arrive
 const grade = new ShaderPass({
-  uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uFade: { value: 1 } },
+  uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uFade: { value: 1 }, uSpd: { value: 0 } },
   vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-  fragmentShader: `uniform sampler2D tDiffuse; uniform float uTime, uFade; varying vec2 vUv;
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float uTime, uFade, uSpd; varying vec2 vUv;
   float hash(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
   void main(){
     vec2 c = vUv - 0.5; float r2 = dot(c, c); vec2 d = c * (0.0008 + r2 * 0.006);
-    vec3 col = vec3(texture2D(tDiffuse, vUv - d).r, texture2D(tDiffuse, vUv).g, texture2D(tDiffuse, vUv + d).b);
+    // at speed everything off the middle of the view smears back toward it (the middle itself stays sharp), and the fringes widen a little
+    d *= 1.0 + 1.5 * uSpd;
+    float bl = uSpd * 0.075 * smoothstep(0.004, 0.22, r2);
+    vec3 col = vec3(0.0);
+    for (int i = 0; i < 10; i++){
+      vec2 uv = vUv - c * bl * (float(i) / 9.0);
+      col += vec3(texture2D(tDiffuse, uv - d).r, texture2D(tDiffuse, uv).g, texture2D(tDiffuse, uv + d).b);
+      if (bl < 1e-4) { col *= 10.0; break; }
+    }
+    col *= 0.1;
     col = col * vec3(0.97, 1.0, 1.04) + vec3(0.006, 0.008, 0.012);
-    col *= 1.0 - smoothstep(0.10, 0.75, r2) * 0.55;
+    col *= 1.0 - smoothstep(0.10 - 0.04 * uSpd, 0.75, r2) * (0.55 + 0.15 * uSpd);
     col += (hash(gl_FragCoord.xy + fract(uTime * 7.31) * vec2(613.0, 271.0)) - 0.5) * 0.045;
     gl_FragColor = vec4(max(col, 0.0) * (1.0 - uFade), 1.0);
   }`,
@@ -1099,18 +1212,19 @@ function walkClamp(pos, m) {
 // The hall is far too big to walk, so by the door there is something to drive, absurdly fast. E to get in (and out,
 // once it has stopped). W to go, S to brake (and back up), A/D to steer, Space for the hand brake. Flat out it does about 160 m/s,
 // so the light at the far end is a bit over a minute away. It stops dead at the walls.
-const CAR = { x: DOOR.x + 7, z: ZB - 10, yaw: 0, v: 0, steer: 0, sv: 0, yr: 0, on: false, g: new THREE.Group(), hintT: 0, fov: 72, roll: 0, wheels: [], hide: null };
+const CAR = { x: DOOR.x + 7, z: ZB - 10, yaw: 0, v: 0, steer: 0, sv: 0, yr: 0, on: false, g: new THREE.Group(), hintT: 0, fov: 72, roll: 0, wheels: [], hide: null, keep: [] };
 const CAR_MAX = 160, CAR_ACC = 75, SEAT = [0.0, 1.62, 0.6], BUS = { hw: 0.75, hl: 1.55 };
 // It is an airport baggage tug, done as close to the real thing as I can: a white steel body with a blue stripe and rounded edges, a big
 // orange bonnet with a grille, round headlamps, black fenders over fat treaded tyres on steel rims (the wheels turn, the front ones steer),
 // a bent-tube bumper, mirrors, an open seat behind a small dash with gauges, a step plate in chequered aluminium, a tow hitch, tail lamps
-// and an amber beacon. While you drive, the seat back, the beacon and the back panel are left out, so nothing hides the view any way you look.
+// and an amber beacon. While you drive, all of it is left out but the top of the dash with its two gauges, a thin edge at the bottom of the
+// view, so the floor and what shines in it stream past under you uncovered.
 {
   const RB = (sx, sy, sz, r, cx, cy, cz) => { const g = new RoundedBoxGeometry(sx, sy, sz, 3, Math.min(r, sx / 2 - 1e-3, sy / 2 - 1e-3, sz / 2 - 1e-3)); g.translate(cx, cy, cz); return g; };
   const BX = (x0, y0, z0, x1, y1, z1) => { const b = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0); b.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2); return b; };
   const CY = (r0, r1, h, seg, axis, cx, cy, cz) => { const c = new THREE.CylinderGeometry(r0, r1, h, seg); if (axis === 'x') c.rotateZ(Math.PI / 2); if (axis === 'z') c.rotateX(Math.PI / 2); c.translate(cx, cy, cz); return c; };
   const TB = (pts, r) => new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map((p) => new V3(...p)), false, 'catmullrom', 0.2), pts.length * 12, r, 10, false);
-  const P = { white: [], orange: [], blue: [], plastic: [], rubber: [], metal: [], steel: [], seat: [], glowW: [], glowR: [], glowA: [], gauge: [] };
+  const P = { white: [], orange: [], blue: [], plastic: [], rubber: [], metal: [], steel: [], seat: [], glowW: [], glowR: [], glowA: [], gauge: [], dash: [], dashM: [] };
   const H = { plastic: [], seat: [], white: [], glowA: [] };   // the parts left out while you drive
   // the frame and body
   P.steel.push(BX(-0.6, 0.24, -1.5, 0.6, 0.42, 1.45));
@@ -1138,8 +1252,8 @@ const CAR_MAX = 160, CAR_ACC = 75, SEAT = [0.0, 1.62, 0.6], BUS = { hw: 0.75, hl
   // the step plate, the floor of the cab, the dash and its gauges, the steering column and wheel (kept low)
   P.metal.push(BX(-0.74, 0.62, 0.15, -0.71, 0.66, 0.75), BX(0.71, 0.62, 0.15, 0.74, 0.66, 0.75));
   P.rubber.push(BX(-0.6, 1.05, 0.05, 0.6, 1.06, 1.25));
-  P.plastic.push(RB(0.9, 0.16, 0.2, 0.05, 0, 1.17, -0.06));
-  for (const x of [-0.24, 0.24]) { P.metal.push(CY(0.045, 0.045, 0.02, 18, 'z', x, 1.18, -0.162)); P.gauge.push(CY(0.036, 0.036, 0.01, 18, 'z', x, 1.18, -0.173)); }
+  P.dash.push(RB(0.9, 0.16, 0.2, 0.05, 0, 1.17, -0.06));
+  for (const x of [-0.24, 0.24]) { P.dashM.push(CY(0.045, 0.045, 0.02, 18, 'z', x, 1.18, -0.162)); P.gauge.push(CY(0.036, 0.036, 0.01, 18, 'z', x, 1.18, -0.173)); }
   P.steel.push(CY(0.03, 0.03, 0.42, 10, 'y', 0, 1.2, 0.1).rotateX(0));
   { const sw = new THREE.TorusGeometry(0.17, 0.018, 10, 32); sw.rotateX(-1.25); sw.translate(0, 1.3, 0.26); P.plastic.push(sw);
     for (let k = 0; k < 3; k++) { const a = k / 3 * Math.PI * 2, s = new THREE.CylinderGeometry(0.01, 0.01, 0.16, 6); s.rotateZ(Math.PI / 2); s.rotateY(a); s.rotateX(-1.25); s.translate(0, 1.3, 0.26); P.plastic.push(s); } }
@@ -1152,8 +1266,8 @@ const CAR_MAX = 160, CAR_ACC = 75, SEAT = [0.0, 1.62, 0.6], BUS = { hw: 0.75, hl
   H.plastic.push(CY(0.018, 0.018, 0.5, 8, 'y', 0.58, 1.6, 1.3)); H.glowA.push(CY(0.06, 0.07, 0.12, 16, 'y', 0.58, 1.9, 1.3));
   const m = (geos, mt, parent) => { if (!geos.length) return null; const me = new THREE.Mesh(mergeGeometries(geos.map((g) => { g = g.index ? g.toNonIndexed() : g; for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv') g.deleteAttribute(k); if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2)); return g; })), mt); (parent || CAR.g).add(me); return me; };
   const MT = { white: mat(8, [0.80, 0.81, 0.82], 'paintW'), orange: mat(8, [0.78, 0.36, 0.06], 'paintO'), blue: mat(8, [0.03, 0.13, 0.48], 'paintB'), plastic: mat(11), rubber: mat(9), metal: mat(10), steel: mat(11, [0, 0, 0], 'steel'), seat: mat(11, [0, 0, 0], 'seat'),
-    glowW: mat(4, [6.0, 6.0, 5.4], 'head2'), glowR: mat(4, [3.5, 0.25, 0.15], 'tail2'), glowA: mat(4, [3.8, 1.8, 0.2], 'amber'), gauge: mat(4, [0.4, 1.1, 1.5], 'gauge2') };
-  for (const k of Object.keys(P)) m(P[k], MT[k]);
+    glowW: mat(4, [6.0, 6.0, 5.4], 'head2'), glowR: mat(4, [3.5, 0.25, 0.15], 'tail2'), glowA: mat(4, [3.8, 1.8, 0.2], 'amber'), gauge: mat(4, [0.4, 1.1, 1.5], 'gauge2'), dash: mat(11), dashM: mat(10) };
+  for (const k of Object.keys(P)) { const me = m(P[k], MT[k]); if (me && (k === 'dash' || k === 'dashM' || k === 'gauge')) CAR.keep.push(me); }
   CAR.hide = new THREE.Group(); CAR.g.add(CAR.hide); for (const k of Object.keys(H)) m(H[k], MT[k], CAR.hide);
   // the wheels: treaded tyres (turned on a lathe), steel rims with five studs, a hub cap; each its own piece so it can roll and steer
   const prof = []; for (let k = 0; k <= 16; k++) { const a = -Math.PI / 2 + k / 16 * Math.PI; prof.push(new THREE.Vector2(0.29 + 0.07 * Math.cos(a), 0.12 * Math.sin(a))); }
@@ -1186,7 +1300,7 @@ function carE() {
     const c = Math.cos(CAR.yaw), s = Math.sin(CAR.yaw);   // out on the driver's side
     const lx = -BUS.hw - 1.0, lz = SEAT[2]; P.pos.set(CAR.x + c * lx + s * lz, 0, CAR.z - s * lx + c * lz); P.vel.set(0, 0, 0); return;
   }
-  if (carNear()) { CAR.on = true; CAR.hintT = 7; CAR.steer = CAR.sv = CAR.yr = CAR.roll = 0; P.vel.set(0, 0, 0); P.yaw = CAR.yaw; P.pitch = -0.22; initAudio(); }
+  if (carNear()) { CAR.on = true; CAR.hintT = 7; CAR.steer = CAR.sv = CAR.yr = CAR.roll = 0; P.vel.set(0, 0, 0); P.yaw = CAR.yaw; P.pitch = -0.02; initAudio(); }
 }
 addEventListener('keydown', (e) => { if (e.code === 'KeyE' && !e.repeat && !(window.SCF_G && window.SCF_G.isOpen())) carE(); });
 let eng = null;
@@ -1215,11 +1329,12 @@ function drive(dt) {
 }
 function carFrame(dt) {
   CAR.g.position.set(CAR.x, 0, CAR.z); CAR.g.rotation.y = CAR.yaw;
-  // the wheels roll with the speed, the front ones turn with the steering; and the parts behind your head are left out while you drive
+  // the wheels roll with the speed, the front ones turn with the steering; and while you drive the car itself is left out but for the dash
   for (const w of CAR.wheels) { w.spin.rotation.x -= CAR.v * dt / 0.36; if (w.front) w.piv.rotation.y = CAR.steer * 0.5 / (1 + Math.abs(CAR.v) / 60); }
-  CAR.hide.visible = !CAR.on;
-  // the view pulls wider the faster you go
-  const f = 72 + 16 * clamp(CAR.v / CAR_MAX, 0, 1); if (Math.abs(f - CAR.fov) > 0.05) { CAR.fov = f; camera.fov = f; camera.updateProjectionMatrix(); }
+  for (const ch of CAR.g.children) ch.visible = !CAR.on || CAR.keep.includes(ch);   // driving: only the dash's top edge is left,
+  for (const me of CAR.keep) me.position.y = CAR.on ? -0.17 : 0;                        // sunk so that it is just a sliver along the bottom
+  // the view pulls a little wider the faster you go (only a little: wider would bring the dash up into it)
+  const f = 72 + 7 * clamp(CAR.v / CAR_MAX, 0, 1); if (Math.abs(f - CAR.fov) > 0.05) { CAR.fov = f; camera.fov = f; camera.updateProjectionMatrix(); }
   CAR.hintT = Math.max(0, CAR.hintT - dt);
   if (CAR.on) { carUI.textContent = CAR.hintT > 0 ? 'W  GO  ·  S  BRAKE  ·  A D  STEER  ·  E  GET OUT' : (Math.abs(CAR.v) < 4 && CAR.hintT === 0 ? '' : ''); carUI.style.opacity = CAR.hintT > 0 ? '1' : '0'; carSpd.style.opacity = '1'; carSpd.textContent = Math.round(Math.abs(CAR.v) * 3.6) + ' km/h'; }
   else { const n = carNear(); carUI.textContent = 'E  DRIVE'; carUI.style.opacity = n ? '1' : '0'; carSpd.style.opacity = '0'; }
@@ -1256,13 +1371,10 @@ function frame(now) {
   if (!(window.SCF_G && window.SCF_G.isOpen())) { if (CAR.on) drive(dt); else step(dt); }
   carFrame(dt); megaFrame(uTime.value);
   placeCamera(uTime.value); uCam.value.copy(camera.position);
-  // dust: kept round you, drifting; only seen while the car is moving (it comes in with the speed), never when you stand or walk
-  dustK += ((CAR.on ? clamp(Math.abs(CAR.v) / 30, 0, 1) : 0) - dustK) * Math.min(1, dt * 3); dust.p.material.opacity = 0.55 * dustK; dust.p.visible = dustK > 0.01;
-  { const a = dust.a, c = camera.position, t = uTime.value;
-    for (let i = 0; i < dust.N; i++) { const o = i * 3; a[o] += Math.sin(t * 0.2 + i) * 0.0015; a[o + 1] += 0.001 * Math.cos(t * 0.13 + i * 1.7); for (let k = 0; k < 3; k++) { const ck = k === 0 ? c.x : k === 1 ? c.y : c.z, rel = a[o + k] - ck; if (rel > 12 || rel < -12) a[o + k] = ck + (((rel + 12) % 24) + 24) % 24 - 12; } }
-    dust.p.geometry.attributes.position.needsUpdate = true; }
+  // speed: no dust in the air any more; what tells you how fast you go is the floor and the walls streaming past, smeared out from the middle
+  spdK += ((CAR.on ? clamp(Math.abs(CAR.v) / CAR_MAX, 0, 1) : 0) - spdK) * Math.min(1, dt * 2.5);
   if (blinkMat) blinkMat.opacity = 0.15 + 0.85 * (Math.sin(uTime.value * Math.PI * 0.9) > 0.2 ? 1 : 0);
-  grade.uniforms.uTime.value = uTime.value; grade.uniforms.uFade.value = clamp(1 - (fadeT - 0.4) / 3.5, 0, 1);
+  grade.uniforms.uTime.value = uTime.value; grade.uniforms.uSpd.value = Math.pow(spdK, 1.3); grade.uniforms.uFade.value = clamp(1 - (fadeT - 0.4) / 3.5, 0, 1);
   renderMirror();
   composer.render();
 }
