@@ -225,7 +225,7 @@ const CASE_X = W - 0.62, CZ0 = 1.0, CZ1 = 13.6;
 // the long shelving runs (gondolas) and the wall shelving on the west side
 const SOCKET_AT = new V3(5.08, LEVELS[1], 7.05), PUMP_AT = new V3(0.24, LEVELS[0], 10.2);
 shelving(7.1, [1, -1], GZ0, GZ1, 0.36);                                         // between aisles 1 and 2
-shelving(4.8, [1, -1], GZ0, GZ1, 0.36, { '1:1': [SOCKET_AT.z - 0.22, SOCKET_AT.z + 0.22] });   // aisle 2 side: the power strip
+shelving(4.8, [1, -1], GZ0, GZ1, 0.36, { '1:1': [SOCKET_AT.z - 0.26, SOCKET_AT.z + 0.36] });   // aisle 2 side: the power strip
 shelving(2.5, [1, -1], GZ0, GZ1, 0.36);                                         // between aisles 3 and 4
 shelving(0.02, [1], 1.0, 14.6, 0.42, { '1:0': [PUMP_AT.z - 0.3, PUMP_AT.z + 0.3] });           // the west wall: seasonal, pool things
 // end caps at the front, a few tall stacks of the same thing
@@ -280,31 +280,96 @@ for (const x of [7.95, 5.95, 3.65, 1.4]) for (let z = 1.2; z < D - 0.5; z += 2.4
 /* the two things you can take                                         */
 /* ------------------------------------------------------------------ */
 const pickups = [];
-{ // a white power strip, its orange cord in a loose coil, on the second shelf of aisle 2
-  const g = new THREE.Group(), white = std({ color: 0xf1eee4, roughness: 0.4 }), hole = std({ color: 0x2c2a26, roughness: 0.8 });
-  const body = new THREE.Mesh(new RoundedBoxGeometry(0.05, 0.03, 0.2, 2, 0.008), white); g.add(body);
-  for (let i = 0; i < 4; i++) { const h = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.004, 0.024), hole); h.position.set(0, 0.016, -0.065 + i * 0.04); g.add(h); }
-  const sw = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.008, 0.022), std({ color: 0xe2552c, emissive: 0xff4a1e, emissiveIntensity: 0.9 })); sw.position.set(0, 0.018, 0.092); g.add(sw);
-  const pts = []; for (let i = 0; i <= 60; i++) { const a = i / 60 * Math.PI * 4.2, r = 0.05 + 0.012 * Math.sin(i * 0.7); pts.push(new V3(-0.07 + Math.cos(a) * r * 0.8, 0.004 + i * 0.0003, -0.16 + Math.sin(a) * r)); }
-  pts.unshift(new V3(0, 0, -0.1)); const cord = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 120, 0.005, 6), std({ color: 0xe08a2e, roughness: 0.5 })); cord.position.y = -0.012; g.add(cord);
-  g.position.set(SOCKET_AT.x - 0.06, SOCKET_AT.y + 0.016, SOCKET_AT.z); g.rotation.y = 0.12; stage.add(g);
-  pickups.push({ id: 'socket', g, at: new V3(SOCKET_AT.x - 0.06, SOCKET_AT.y + 0.03, SOCKET_AT.z), got: 'A power strip. The cord is still warm.' });
+// A soft warm glow so they can be found in the dark: a halo behind each, a little light on the shelf, and the thing itself
+// brightening and dimming slowly. Each pulses (pulsePickups, every frame) only while it is still there to take.
+const haloTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d'), r = g.createRadialGradient(64, 64, 4, 64, 64, 64);
+  r.addColorStop(0, 'rgba(255,240,200,0.9)'); r.addColorStop(0.35, 'rgba(255,214,140,0.35)'); r.addColorStop(1, 'rgba(255,200,120,0)'); g.fillStyle = r; g.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c); })();
+function glowFor(P, size, lightAt) {
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex, color: 0xffe2a8, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.3 }));
+  halo.scale.setScalar(size); halo.position.copy(P.at); stage.add(halo);
+  const light = new THREE.PointLight(0xffd9a0, 0.3, 1.2, 2); light.position.copy(lightAt); stage.add(light);
+  const mats = []; P.g.traverse((o) => { if (o.isMesh && o.material.emissive && !mats.includes(o.material)) mats.push(o.material); });
+  for (const m of mats) { m.userData.e0 = m.emissive.clone(); m.userData.i0 = m.emissiveIntensity; }
+  Object.assign(P, { halo, light, mats, ph: Math.random() * 6 });
+}
+function pulsePickups(t) {
+  for (const P of pickups) {
+    const on = P.g.visible, k = 0.5 + 0.5 * Math.sin(t * 2.2 + P.ph);
+    P.halo.visible = on; P.light.intensity = on ? 0.22 + 0.22 * k : 0;
+    if (!on) continue;
+    P.halo.material.opacity = 0.3 + 0.3 * k;
+    for (const m of P.mats) { if (m.userData.glow) { m.emissiveIntensity = m.userData.i0 * (0.7 + 0.5 * k); continue; } m.emissive.copy(m.color).multiplyScalar(0.08 + 0.14 * k); m.emissiveIntensity = 1; }
+  }
+}
+const plastic = (c, r) => std({ color: c, roughness: r === undefined ? 0.42 : r });
+{ // a white power strip on the second shelf of aisle 2: four sockets, a lit red switch, and its cord coiled beside it with the plug on the end
+  const g = new THREE.Group(), white = plastic(0xeeeadf, 0.38), face = plastic(0xe2ddd0, 0.5), dark = plastic(0x1e1d1b, 0.7), metal = std({ color: 0xc9c4b4, roughness: 0.3, metalness: 0.9 });
+  const L = 0.26, Wd = 0.06, Hh = 0.034;
+  const body = new THREE.Mesh(new RoundedBoxGeometry(Wd, Hh, L, 3, 0.01), white); body.position.y = Hh / 2; g.add(body);
+  const top = new THREE.Mesh(new RoundedBoxGeometry(Wd - 0.008, 0.004, L - 0.06, 2, 0.0018), face); top.position.set(0, Hh + 0.0005, -0.012); g.add(top);
+  for (let i = 0; i < 4; i++) {   // each socket: a recessed face, two flat slots and a round earth hole
+    const z = -0.088 + i * 0.05, s = new THREE.Group(); s.position.set(0, Hh + 0.002, z);
+    const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.003, 24), plastic(0xd6d0c1, 0.55)); s.add(rim);
+    for (const dx of [-0.0065, 0.0065]) { const sl = new THREE.Mesh(new THREE.BoxGeometry(0.0022, 0.004, 0.009), dark); sl.position.set(dx, 0.0008, -0.002); s.add(sl); }
+    const eh = new THREE.Mesh(new THREE.CylinderGeometry(0.0023, 0.0023, 0.004, 10), dark); eh.position.set(0, 0.0008, 0.008); s.add(eh);
+    g.add(s);
+  }
+  // the switch, at the cord end: a dark bezel and a red rocker lit from inside
+  const bez = new THREE.Mesh(new RoundedBoxGeometry(0.03, 0.006, 0.022, 2, 0.002), dark); bez.position.set(0, Hh + 0.002, L / 2 - 0.022); g.add(bez);
+  const rockM = std({ color: 0xd83a22, roughness: 0.25, emissive: 0xff4a1e, emissiveIntensity: 1.4, transparent: true, opacity: 0.92 }); rockM.userData.glow = true;
+  const rock = new THREE.Mesh(new RoundedBoxGeometry(0.022, 0.007, 0.015, 2, 0.002), rockM); rock.position.set(0, Hh + 0.006, L / 2 - 0.022); rock.rotation.x = 0.18; g.add(rock);
+  // the cord: out of the end, round in two loose loops on the shelf, and the plug lying at the end of it
+  const pts = [new V3(0, 0.012, L / 2), new V3(0, 0.008, L / 2 + 0.03), new V3(-0.03, 0.006, L / 2 + 0.06)];
+  for (let i = 0; i <= 40; i++) { const a = Math.PI * 0.5 + i / 40 * Math.PI * 3.6, r = 0.055 - i * 0.0004; pts.push(new V3(-0.085 + Math.cos(a) * r, 0.005 + (i % 9 === 0 ? 0.004 : 0), L / 2 - 0.02 + Math.sin(a) * r * 1.2)); }
+  pts.push(new V3(-0.13, 0.006, 0.04), new V3(-0.12, 0.006, -0.02));
+  const cord = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 220, 0.0042, 8), plastic(0xe58a2e, 0.5)); g.add(cord);
+  const plug = new THREE.Group(); plug.position.set(-0.12, 0.012, -0.045); plug.rotation.y = 0.25;
+  plug.add(new THREE.Mesh(new RoundedBoxGeometry(0.03, 0.022, 0.036, 2, 0.005), white));
+  for (const dx of [-0.0065, 0.0065]) { const pr = new THREE.Mesh(new THREE.BoxGeometry(0.0022, 0.009, 0.016), metal); pr.position.set(dx, 0, -0.026); plug.add(pr); }
+  const pe = new THREE.Mesh(new THREE.CylinderGeometry(0.0024, 0.0024, 0.016, 8), metal); pe.rotation.x = Math.PI / 2; pe.position.set(0, -0.006, -0.026); plug.add(pe);
+  g.add(plug);
+  // a little price sticker on the side
+  const st = signTex(['$4.99'], '#ffd23a', '#2a2208', 128, 48), sm = new THREE.Mesh(new THREE.PlaneGeometry(0.04, 0.015), std({ map: st, roughness: 0.6 })); sm.rotation.y = Math.PI / 2; sm.position.set(Wd / 2 + 0.0008, Hh * 0.55, -0.04); g.add(sm);
+  g.scale.setScalar(1.25); g.position.set(SOCKET_AT.x - 0.12, SOCKET_AT.y, SOCKET_AT.z); g.rotation.y = 0.18; stage.add(g);
+  const P = { id: 'socket', g, at: new V3(SOCKET_AT.x - 0.12, SOCKET_AT.y + 0.035, SOCKET_AT.z), got: 'A power strip. The cord is still warm.' };
+  pickups.push(P); glowFor(P, 0.8, new V3(SOCKET_AT.x + 0.15, SOCKET_AT.y + 0.2, SOCKET_AT.z));
 }
 { // a red floor pump standing on the bottom shelf of the west wall, among boxed pool floats
-  const g = new THREE.Group(), red = std({ color: 0xc8382a, roughness: 0.35, metalness: 0.1 }), blk = std({ color: 0x222127, roughness: 0.6 });
-  const base = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.012, 0.05), blk); base.position.y = 0.006; g.add(base);
-  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.28, 16), red); barrel.position.y = 0.152; g.add(barrel);
-  const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.06, 8), M.metal); rod.position.y = 0.32; g.add(rod);
-  const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.14, 10), blk); handle.rotation.z = Math.PI / 2; handle.position.y = 0.355; g.add(handle);
-  const gauge = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.008, 16), std({ color: 0xf2efe6, roughness: 0.3 })); gauge.rotation.x = Math.PI / 2; gauge.position.set(0, 0.07, 0.024); g.add(gauge);
-  const pts = [new V3(0.02, 0.05, 0), new V3(0.07, 0.03, 0.01), new V3(0.09, 0.12, 0.02), new V3(0.06, 0.2, 0.01), new V3(0.03, 0.24, 0.0)];
-  g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 30, 0.006, 6), blk));
+  const g = new THREE.Group(), red = std({ color: 0xc8322a, roughness: 0.28, metalness: 0.15 }), blk = plastic(0x1f1e23, 0.6), chrome = std({ color: 0xd8d8d2, roughness: 0.18, metalness: 1 });
+  // feet: a black T you stand on, with grip ridges
+  for (const sx of [-1, 1]) { const f = new THREE.Mesh(new RoundedBoxGeometry(0.08, 0.014, 0.045, 2, 0.005), blk); f.position.set(sx * 0.05, 0.007, 0); g.add(f);
+    for (let k = 0; k < 4; k++) { const r = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.003, 0.038), plastic(0x2c2b31, 0.8)); r.position.set(sx * (0.025 + k * 0.016), 0.015, 0); g.add(r); } }
+  const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.034, 0.03, 20), blk); foot.position.y = 0.022; g.add(foot);
+  // the barrel, with a black collar at each end and a white band with the maker's name
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.29, 24), red); barrel.position.y = 0.18; g.add(barrel);
+  for (const y of [0.04, 0.322]) { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.018, 24), blk); c.position.y = y; g.add(c); }
+  const band = signTex(['AIR·MAX'], '#f4f1e8', '#c8322a', 256, 64); band.wrapS = THREE.RepeatWrapping;
+  const bm = new THREE.Mesh(new THREE.CylinderGeometry(0.0222, 0.0222, 0.05, 24, 1, true), std({ map: band, roughness: 0.4 })); bm.position.y = 0.22; g.add(bm);
+  // the rod and the handle, its grips in black rubber
+  const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.0045, 0.0045, 0.07, 10), chrome); rod.position.y = 0.365; g.add(rod);
+  const hbar = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.06, 12), blk); hbar.rotation.z = Math.PI / 2; hbar.position.y = 0.402; g.add(hbar);
+  for (const sx of [-1, 1]) { const gr = new THREE.Mesh(new THREE.CapsuleGeometry(0.011, 0.05, 4, 12), plastic(0x2a2930, 0.85)); gr.rotation.z = Math.PI / 2; gr.position.set(sx * 0.055, 0.402, 0); g.add(gr); }
+  // the gauge low on the front: chrome bezel, white face, a red needle
+  const gauge = new THREE.Group(); gauge.position.set(0, 0.075, 0.028); gauge.rotation.x = Math.PI / 2;
+  gauge.add(new THREE.Mesh(new THREE.CylinderGeometry(0.021, 0.021, 0.01, 24), chrome));
+  const dial = signTex(['· · ·'], '#f7f4ea', '#333', 64, 64);
+  const fm = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.017, 0.011, 24), std({ color: 0xf7f4ea, roughness: 0.3, map: dial })); gauge.add(fm);
+  const nd = new THREE.Mesh(new THREE.BoxGeometry(0.0018, 0.012, 0.014), std({ color: 0xd8261a, emissive: 0x8a1408, emissiveIntensity: 0.5 })); nd.position.set(0, 0.006, -0.004); nd.rotation.y = 0.7; gauge.add(nd);
+  g.add(gauge);
+  // the hose: out of the foot, up in a loop, clipped to the barrel, and the brass head hanging in its holder
+  const hp = [new V3(0.03, 0.03, 0.0), new V3(0.075, 0.03, 0.02), new V3(0.09, 0.12, 0.03), new V3(0.06, 0.24, 0.03), new V3(0.03, 0.27, 0.02), new V3(0.026, 0.25, 0.0)];
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(hp), 60, 0.0055, 8), blk));
+  const clip = new THREE.Mesh(new THREE.TorusGeometry(0.024, 0.003, 6, 20), blk); clip.rotation.x = Math.PI / 2; clip.position.y = 0.25; g.add(clip);
+  const brass = std({ color: 0xc9a24a, roughness: 0.25, metalness: 0.9 });
+  const head = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.007, 0.03, 12), brass); head.position.set(0.026, 0.232, 0.0); g.add(head);
+  const lever = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.02, 0.008), blk); lever.position.set(0.034, 0.24, 0.0); lever.rotation.z = -0.3; g.add(lever);
   g.position.set(PUMP_AT.x + 0.05, PUMP_AT.y, PUMP_AT.z); g.rotation.y = Math.PI / 2 + 0.3; stage.add(g);
-  pickups.push({ id: 'pump', g, at: new V3(PUMP_AT.x + 0.05, PUMP_AT.y + 0.18, PUMP_AT.z), got: 'An air pump. Something here was meant to be blown up.' });
+  const P = { id: 'pump', g, at: new V3(PUMP_AT.x + 0.05, PUMP_AT.y + 0.2, PUMP_AT.z), got: 'An air pump. Something here was meant to be blown up.' };
+  pickups.push(P); glowFor(P, 0.95, new V3(PUMP_AT.x + 0.35, PUMP_AT.y + 0.32, PUMP_AT.z));
   // the boxes of pool floats around it
   const fl = signTex(['SPLASH!'], '#3fb6c9', '#fff6c2', 256, 128);
-  const fm = std({ map: fl, roughness: 0.5 });
-  for (const dz of [-0.62, -0.42, 0.42, 0.62]) { const b = new THREE.Mesh(boxGeo, fm); b.scale.set(0.3, 0.24, 0.17); b.position.set(0.22, PUMP_AT.y + 0.12, PUMP_AT.z + dz); stage.add(b); }
+  const fmb = std({ map: fl, roughness: 0.5 });
+  for (const dz of [-0.62, -0.42, 0.42, 0.62]) { const b = new THREE.Mesh(boxGeo, fmb); b.scale.set(0.3, 0.24, 0.17); b.position.set(0.22, PUMP_AT.y + 0.12, PUMP_AT.z + dz); stage.add(b); }
 }
 
 /* ------------------------------------------------------------------ */
@@ -551,6 +616,7 @@ function frame(now) {
     F.l.intensity = F.base * F.f; F.p.m.material.emissiveIntensity = 1.8 * F.f;
     if (F.bad && buzz) buzz.gain.value = 0.012 * (F.f > 0.3 ? 1 : 0.2) * sstep(6, 1.5, Math.hypot(player.pos.x - F.p.x, player.pos.z - F.p.z));
   }
+  pulsePickups(time);
   const P = aimed();
   if (window.Equip) { if (P) { _p.copy(P.at).project(camera); window.Equip.prompt((_p.x * 0.5 + 0.5) * innerWidth, (-_p.y * 0.5 + 0.5) * innerHeight); } else window.Equip.prompt(null); }
   grade.uniforms.uTime.value = time; since += dt; grade.uniforms.uFade.value = Math.max(1 - sstep(-0.6, -0.05, d), 1 - sstep(0, 0.5, since));   // half a second of black on arrival; dark again walking back out
