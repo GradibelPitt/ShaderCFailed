@@ -169,6 +169,8 @@ void main(){
   // and what is too small for a pixel from where you stand is left out, so twelve kilometres off it is still sharp, and so it is at arm's length
 #ifdef CAPX
   vec2 u = vW.xy;                                                   // the rock's broken-off end faces -z: its pattern runs across x
+#elif defined(CAPY)
+  vec2 u = vW.zx;                                                   // the underside of the rock over the platform's way through
 #else
   vec2 u = vW.zy;
 #endif
@@ -206,6 +208,8 @@ void main(){
   g /= 1.0 + 0.4 * length(g);
 #ifdef CAPX
   vec3 ez = normalize(vec3(1.0, 0.0, 0.0) - n * n.x + 1e-4), ey = normalize(vec3(0.0, 1.0, 0.0) - n * n.y + 1e-4);
+#elif defined(CAPY)
+  vec3 ez = normalize(vec3(0.0, 0.0, 1.0) - n * n.z + 1e-4), ey = normalize(vec3(1.0, 0.0, 0.0) - n * n.x + 1e-4);
 #else
   vec3 ez = normalize(vec3(0.0, 0.0, 1.0) - n * n.z + 1e-4), ey = normalize(vec3(0.0, 1.0, 0.0) - n * n.y + 1e-4);
 #endif
@@ -314,16 +318,16 @@ const CZ1 = ZE - 1700;   // the rock runs on past the end of the floor, out into
     vertexShader: VERT.replace('uniform mat4 uMirrorVP;', 'uniform mat4 uMirrorVP; attribute float aAO; varying float vAO;').replace('void main(){', 'void main(){ vAO = aAO;') }));
 }
 
-// The part of the cliff that sticks out past the end of the hall is seen from outside too (from the platform), so there it is not a sheet:
-// it has a back, 0.9 to 1.6 km behind its face, and its broken-off end closes the gap between the two. Nowhere else is changed.
+// The cliff is seen from outside too (from the platform past the end of the hall), so it is not a sheet but solid rock: all along its length
+// it has a back, 0.9 to 1.6 km behind its face, and both its ends (the broken-off one out in the light, and the far one) close the gap.
 {
-  const NY = 200, Hh = 13600, y0 = -300, Z0b = CZ1, Z1b = ZE + 400, NZ = 46, NS = 14;
+  const NY = 200, Hh = 13600, y0 = -300, Z0b = CZ1, Z1b = ZB + 300, NZ = 230, NS = 14;
   const front = (y, z) => { let x = XL + cliffOut(y, z); if (z < ZE + 300) x -= Math.pow((ZE + 300 - z) / 1400, 2) * 900 * (0.6 + 0.4 * rfbm(y / 900, z / 900)); return x; };
   const thick = (y, z) => 900 + 700 * rfbm(z / 1500 + 9.1, y / 1500 + 2.3);
-  const mesh = (pos, idx, cap) => {
+  const mesh = (pos, idx, cap) => {   // cap: false (the face's own pattern), true (across x), 'y' (lying flat)
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx);
     g.setAttribute('aAO', new THREE.BufferAttribute(new Float32Array(pos.length / 3), 1)); g.computeVertexNormals();
-    add(g, new THREE.ShaderMaterial({ uniforms: { uCam, uTime, uMirrorVP, uBase: { value: new V3() } }, defines: cap ? { KIND: 2, CAPX: 1 } : { KIND: 2 }, side: THREE.DoubleSide, fragmentShader: FRAG,
+    add(g, new THREE.ShaderMaterial({ uniforms: { uCam, uTime, uMirrorVP, uBase: { value: new V3() } }, defines: cap === 'y' ? { KIND: 2, CAPY: 1 } : cap ? { KIND: 2, CAPX: 1 } : { KIND: 2 }, side: THREE.DoubleSide, fragmentShader: FRAG,
       vertexShader: VERT.replace('uniform mat4 uMirrorVP;', 'uniform mat4 uMirrorVP; attribute float aAO; varying float vAO;').replace('void main(){', 'void main(){ vAO = aAO;') }));
   };
   const grid = (C, R, at, cut) => { const pos = [], idx = [];
@@ -339,6 +343,21 @@ const CZ1 = ZE - 1700;   // the rock runs on past the end of the floor, out into
   const end = grid(NS, NY, (s, v) => { const y = y0 + Hh * v, xf = front(y, CZ1), xb = xf - thick(y, CZ1);
     const b = Math.sin(Math.PI * s) * (120 + 260 * rfbm(y / 700 + 4.2, s * 3.0 + 1.7)); return [xf + (xb - xf) * s, y, CZ1 - b]; });
   mesh(end[0], end[1], true);
+  const end2 = grid(NS, NY, (s, v) => { const y = y0 + Hh * v, xf = front(y, Z1b), xb = xf - thick(y, Z1b);
+    const b = Math.sin(Math.PI * s) * (120 + 260 * rfbm(y / 700 + 8.6, s * 3.0 + 5.1)); return [xf + (xb - xf) * s, y, Z1b + b]; });
+  mesh(end2[0], end2[1], true);
+  // and its top, from the face's upper edge back to the back's
+  const top = grid(NZ, NS, (u, s) => { const z = Z0b + (Z1b - Z0b) * u, y = y0 + Hh, xf = front(y, z), xb = xf - thick(y, z);
+    return [xf + (xb - xf) * s, y + Math.sin(Math.PI * s) * (60 + 140 * rfbm(z / 600 + 2.2, s * 3.0)), z]; });
+  mesh(top[0], top[1], false);
+  // the platform's way through at its foot is a tunnel in solid rock, not a gap into a hollow: a rock roof over it, and rock at both its sides
+  const TY = 108, za = PZ1 - 70, zb = ZE + 70, ru = (a, b) => 18 * (rfbm(a, b) - 0.5);
+  const roof = grid(16, 16, (s, u) => { const z = za + (zb - za) * u, xf = front(TY, z) + 30, xb = xf - 30 - thick(TY, z) - 30; return [xf + (xb - xf) * s, TY + ru(s * 4.1, u * 6.3), z]; });
+  mesh(roof[0], roof[1], 'y');
+  for (const z of [za, zb]) {
+    const side = grid(16, 6, (s, v) => { const y = -5 + (TY + 10) * v, xf = front(y, z) + 30, xb = xf - 30 - thick(y, z) - 30; return [xf + (xb - xf) * s, y, z + ru(s * 3.7 + z, v * 2.9)]; });
+    mesh(side[0], side[1], true);
+  }
 }
 
 /* ---------------- floor, walls ---------------- */
