@@ -15,6 +15,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 /* ------------------------------------------------------------------ */
 /* constants                                                           */
@@ -283,15 +284,18 @@ for (const x of [7.95, 5.95, 3.65, 1.4]) for (let z = 1.2; z < D - 0.5; z += 2.4
 // In the back corner by the EXIT, a vent in the ceiling: E opens it and an iron ladder drops. At the top, the duct is too narrow for you
 // as you are (only shrunk do you fit). It winds over the shop and on beyond its west wall, lit by a few work lamps, to a grille in its
 // floor with light coming up through it: the ceiling vent of an abandoned cinema's box office (E opens that one too, and a ladder drops).
-// The box office opens onto the lobby, and the lobby onto the one screen. The duct, the box office, the lobby and the screen are all
-// in this same scene, west of the shop (x < 0) and over it (y > CEIL), shut off from it by its walls and ceiling.
+// The box office stands just inside the cinema's front doors; behind it the foyer, the concession stand, the ticket check, a corridor,
+// and at the end of that the one screen, a giant-screen hall. All in this same scene, west of the shop (x < 0) and over it (y > CEIL),
+// shut off from it by its walls and ceiling. The cinema's street front faces +z; the hall is behind it, at -z.
 const DUCT_Y = 2.52, DUCT_H = 0.3, DUCT_HW = 0.18, HATCH_HW = 0.15;
-const DUCT_PATH = [[0.9, 15.35], [0.9, 13.2], [2.6, 13.2], [2.6, 10.4], [0.4, 10.4], [0.4, 8.0], [-1.6, 8.0], [-1.6, 9.6], [-3.4, 9.6]];
-const BOX = { x0: -6.4, x1: -2.2, z0: 7.4, z1: 11.8, c: 2.48 };     // the box office
-const LOBBY = { x0: -12, x1: -6.4, z0: 4.0, z1: 14.0, c: 3.4 };
-const HALL = { x0: -13.5, x1: -5.0, z0: -8.5, z1: 3.85, c: 4.0 };   // the screen
+const DUCT_PATH = [[0.9, 15.35], [0.9, 13.2], [2.6, 13.2], [2.6, 10.4], [0.4, 10.4], [0.4, 8.0], [-1.6, 8.0], [-1.6, 12.4], [-3.4, 12.4]];
+const DUCT_BB = { x0: -3.8, x1: 3.0, z0: 7.6, z1: 15.8 };           // the duct's whole footprint: only in here can you be up in it
+const BOX = { x0: -6.0, x1: -2.2, z0: 10.2, z1: 14.6, c: 2.48 };     // the box office, in the front corner of the foyer, by the street doors
+const FOYER = { x0: -18, x1: -2.2, z0: 5.0, z1: 14.6, c: 3.8 };
+const CORR = { x0: -5.0, x1: -2.2, z0: -7.5, z1: 5.0, c: 3.2 };       // from the ticket check back along the side of the hall to its door
+const HALL = { x0: -30, x1: -5.0, z0: -31, z1: -1.0, c: 18 };        // the screen: 25 m by 30, 18 high
 const inR = (r, x, z) => x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1;
-const cinemaCeil = (x, z) => (inR(BOX, x, z) ? BOX.c : inR(LOBBY, x, z) ? LOBBY.c : inR(HALL, x, z) ? HALL.c : 3);
+const cinemaCeil = (x, z) => (inR(BOX, x, z) ? BOX.c : inR(FOYER, x, z) ? FOYER.c : inR(CORR, x, z) ? CORR.c : inR(HALL, x, z) ? HALL.c : 3);
 const ductMetalTex = canvasTex(256, 256, (g, w) => {
   g.fillStyle = '#9aa1a3'; g.fillRect(0, 0, w, w);
   for (let i = 0; i < 2600; i++) { const v = 140 + Math.random() * 40 | 0; g.fillStyle = `rgba(${v},${v + 4},${v + 6},0.25)`; g.fillRect(Math.random() * w, Math.random() * w, 1 + Math.random() * 3, 1); }   // the spangle of galvanised steel
@@ -363,12 +367,12 @@ const ductRects = [];   // where you can be inside it: the corner squares and th
     }
   }
   // the short square shafts down from the duct floor through the ceilings below (the shop's, and the box office's at the far end)
-  for (const [sx, sz, yb] of [[P[0][0], P[0][1], CEIL], [P[last][0], P[last][1], 2.48]]) { const h = HATCH_HW;
+  for (const [sx, sz, yb] of [[P[0][0], P[0][1], CEIL], [P[last][0], P[last][1], BOX.c]]) { const h = HATCH_HW;
     vbox(sx - h - t, sx - h, yb, y0, sz - h, sz + h, MC.duct); vbox(sx + h, sx + h + t, yb, y0, sz - h, sz + h, MC.duct);
     vbox(sx - h - t, sx + h + t, yb, y0, sz - h - t, sz - h, MC.duct); vbox(sx - h - t, sx + h + t, yb, y0, sz + h, sz + h + t, MC.duct); }
   // work lamps: little caged bulbs clipped to the duct roof, so the metal can be seen all the way along
   const bulbM = std({ color: 0xffffff, emissive: 0xffe2b0, emissiveIntensity: 2.2 });
-  for (const [x, z, k] of [[0.9, 14.2, 1.0], [1.7, 13.2, 0.8], [2.6, 11.6, 0.95], [1.5, 10.4, 0.85], [0.4, 9.0, 0.85], [-0.6, 8.0, 0.8], [-1.6, 9.0, 0.7]]) {
+  for (const [x, z, k] of [[0.9, 14.2, 1.0], [1.7, 13.2, 0.8], [2.6, 11.6, 0.95], [1.5, 10.4, 0.85], [0.4, 9.0, 0.85], [-0.6, 8.0, 0.8], [-1.6, 10.2, 0.7], [-2.6, 12.4, 0.6]]) {
     const b = new THREE.Mesh(new THREE.SphereGeometry(0.018, 10, 8), bulbM); b.position.set(x, y1 - 0.03, z); stage.add(b);
     const cage = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.04, 8, 1, true), new THREE.MeshStandardMaterial({ color: 0x2b2b2b, wireframe: true })); cage.position.copy(b.position); stage.add(cage);
     const l = new THREE.PointLight(0xffd8a8, k, 3.2, 1.2); l.position.copy(b.position); stage.add(l);
@@ -384,133 +388,332 @@ function clampToDuct(p, r) {   // the duct's walls, for whoever is in it: back t
 }
 
 /* ---- the cinema ---- */
-// walls of a room with gaps: each gap [a0, a1, y0, y1] along the wall (y1 = top of the gap)
-function wallX(x, z0, z1, top, mat, gaps = [], th = 0.15) {   // a wall along z at x
+// Laid out the way a real one is, in the order you would come to it from the street: the front doors (chained, dark glass, nothing
+// behind them), the box office just inside them on the right, the foyer with the concession stand at its back, the ticket check, a
+// corridor, and only then, behind all of it, the one screen: a giant-screen hall, 25 m across, 30 deep, 18 high, the screen itself
+// 22 m by 15, curved, seats rising steeply away from it. The foyer's walls are bare: walnut to the rail, maroon above, nothing hung.
+// walls of a room with gaps: each gap [a0, a1, y0, y1] along the wall (y1 = top of the gap). mk: box, or mbox (merged, world UVs)
+function wallX(x, z0, z1, top, mat, gaps = [], th = 0.15, mk = box) {   // a wall along z at x
   let z = z0; const gs = gaps.slice().sort((a, b) => a[0] - b[0]);
-  for (const [a, b, y0, y1] of gs) { if (a > z) box(x - th / 2, x + th / 2, 0, top, z, a, mat, true); if (y0 > 0) box(x - th / 2, x + th / 2, 0, y0, a, b, mat, true); if (y1 < top) box(x - th / 2, x + th / 2, y1, top, a, b, mat, y0 > 0); z = b; }
-  if (z < z1) box(x - th / 2, x + th / 2, 0, top, z, z1, mat, true);
+  for (const [a, b, y0, y1] of gs) { if (a > z) mk(x - th / 2, x + th / 2, 0, top, z, a, mat, true); if (y0 > 0) mk(x - th / 2, x + th / 2, 0, y0, a, b, mat, true); if (y1 < top) mk(x - th / 2, x + th / 2, y1, top, a, b, mat, y0 > 0); z = b; }
+  if (z < z1) mk(x - th / 2, x + th / 2, 0, top, z, z1, mat, true);
 }
-function wallZ(z, x0, x1, top, mat, gaps = [], th = 0.15) {   // a wall along x at z
+function wallZ(z, x0, x1, top, mat, gaps = [], th = 0.15, mk = box) {   // a wall along x at z
   let x = x0; const gs = gaps.slice().sort((a, b) => a[0] - b[0]);
-  for (const [a, b, y0, y1] of gs) { if (a > x) box(x, a, 0, top, z - th / 2, z + th / 2, mat, true); if (y0 > 0) box(a, b, 0, y0, z - th / 2, z + th / 2, mat, true); if (y1 < top) box(a, b, y1, top, z - th / 2, z + th / 2, mat, y0 > 0); x = b; }
-  if (x < x1) box(x, x1, 0, top, z - th / 2, z + th / 2, mat, true);
+  for (const [a, b, y0, y1] of gs) { if (a > x) mk(x, a, 0, top, z - th / 2, z + th / 2, mat, true); if (y0 > 0) mk(a, b, 0, y0, z - th / 2, z + th / 2, mat, true); if (y1 < top) mk(a, b, y1, top, z - th / 2, z + th / 2, mat, y0 > 0); x = b; }
+  if (x < x1) mk(x, x1, 0, top, z - th / 2, z + th / 2, mat, true);
 }
+// Most of the cinema is merged into one mesh per material (there is a lot of it), with UVs in metres so the textures keep their size.
+const mbins = new Map();
+const mpush = (mat, g) => { if (!mbins.has(mat)) mbins.set(mat, []); mbins.get(mat).push(g); };
+function mbox(x0, x1, y0, y1, z0, z1, mat, coll) {
+  const w = Math.abs(x1 - x0), h = Math.abs(y1 - y0), d = Math.abs(z1 - z0); if (w < 1e-4 || h < 1e-4 || d < 1e-4) return;
+  const g = new THREE.BoxGeometry(w, h, d), s = mat.userData.uvS || 1, uv = g.attributes.uv, dims = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]];
+  for (let f = 0; f < 6; f++) for (let j = 0; j < 4; j++) { const i = f * 4 + j; uv.setXY(i, uv.getX(i) * dims[f][0] / s, uv.getY(i) * dims[f][1] / s); }
+  g.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2); mpush(mat, g); if (coll) solid(x0, x1, z0, z1, y0, y1);
+}
+function mplane(x0, x1, z0, z1, y, mat, down) {   // a floor (or, down, a ceiling) over a rectangle
+  const w = x1 - x0, d = z1 - z0; if (w < 1e-3 || d < 1e-3) return; const g = new THREE.PlaneGeometry(w, d), s = mat.userData.uvS || 1, uv = g.attributes.uv;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * w / s, uv.getY(i) * d / s);
+  g.rotateX(down ? Math.PI / 2 : -Math.PI / 2); g.translate((x0 + x1) / 2, y, (z0 + z1) / 2); mpush(mat, g);
+}
+function mgeo(mat, g, x, y, z, rx = 0, ry = 0, rz = 0) { if (rx) g.rotateX(rx); if (rz) g.rotateZ(rz); if (ry) g.rotateY(ry); g.translate(x, y, z); mpush(mat, g); }
+function flushMerged() { for (const [mat, gs] of mbins) { const m = new THREE.Mesh(mergeGeometries(gs), mat); m.matrixAutoUpdate = false; m.updateMatrix(); stage.add(m); gs.forEach((g) => g.dispose()); } mbins.clear(); }
+const wmat = (o, s) => { const m = std(o); m.userData.uvS = s; return m; };
+const MX = {
+  carpet: wmat({ map: (() => { const t = MC.carpet.map.clone(); t.repeat.set(1, 1); t.needsUpdate = true; return t; })(), roughness: 0.97 }, 1.8),
+  hallCarpet: wmat({ map: canvasTex(256, 256, (g, w) => {   // the hall's: charcoal with a small blue-grey figure, worn paler down the aisles
+    g.fillStyle = '#17181f'; g.fillRect(0, 0, w, w);
+    for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) { const cx = i * 32 + 16, cy = j * 32 + 16; g.fillStyle = (i + j) % 2 ? '#262a3a' : '#20232e'; g.beginPath(); g.moveTo(cx, cy - 9); g.lineTo(cx + 9, cy); g.lineTo(cx, cy + 9); g.lineTo(cx - 9, cy); g.closePath(); g.fill(); g.fillStyle = '#3a2c1c'; g.fillRect(i * 32 - 1, j * 32 - 1, 3, 3); }
+    for (let i = 0; i < 2400; i++) { g.fillStyle = `rgba(${Math.random() < 0.5 ? '0,0,0' : '90,90,110'},${Math.random() * 0.18})`; g.fillRect(Math.random() * w, Math.random() * w, 2, 2); }
+  }, true), roughness: 0.98 }, 1.6),
+  acoustic: wmat({ map: canvasTex(256, 256, (g, w) => {   // fabric-wrapped acoustic panels, 1.2 m square, dark reveals between
+    g.fillStyle = '#0b0c10'; g.fillRect(0, 0, w, w); g.fillStyle = '#20222b'; g.fillRect(5, 5, w - 10, w - 10);
+    for (let i = 0; i < 5000; i++) { const v = Math.random() < 0.5 ? 14 : 44; g.fillStyle = `rgba(${v},${v},${v + 8},0.18)`; g.fillRect(5 + Math.random() * (w - 10), 5 + Math.random() * (w - 10), 1, 1); }
+    for (let y = 8; y < w - 8; y += 3) { g.fillStyle = 'rgba(0,0,0,0.05)'; g.fillRect(5, y, w - 10, 1); }
+    g.fillStyle = 'rgba(255,255,255,0.03)'; g.fillRect(5, 5, w - 10, 2);
+  }, true), roughness: 0.96 }, 1.2),
+  wood: wmat({ map: canvasTex(256, 256, (g, w) => {   // walnut panelling: two panels to 1.2 m, a bevel at each seam
+    g.fillStyle = '#3a2316'; g.fillRect(0, 0, w, w);
+    for (let i = 0; i < 160; i++) { g.strokeStyle = `rgba(${Math.random() < 0.5 ? '20,10,4' : '90,56,32'},${0.1 + Math.random() * 0.2})`; g.lineWidth = 1 + Math.random() * 2; const x = Math.random() * w; g.beginPath(); g.moveTo(x, 0); g.bezierCurveTo(x + (Math.random() - 0.5) * 14, w * 0.3, x + (Math.random() - 0.5) * 14, w * 0.7, x + (Math.random() - 0.5) * 10, w); g.stroke(); }
+    for (const x of [0, w / 2]) { g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillRect(x, 0, 3, w); g.fillStyle = 'rgba(150,100,60,0.25)'; g.fillRect(x + 3, 0, 2, w); }
+  }, true), roughness: 0.55 }, 1.2),
+  maroon: wmat({ color: 0x4a1c22, roughness: 0.85 }, 1),
+  ceil: wmat({ color: 0x1b191b, roughness: 0.95 }, 1),
+  beam: wmat({ color: 0x2a1a18, roughness: 0.8 }, 1),
+  marble: wmat({ color: 0xcdc3b0, roughness: 0.28 }, 1),
+  black: wmat({ color: 0x050506, roughness: 1 }, 1),
+  hallCeil: wmat({ color: 0x0c0c0f, roughness: 1 }, 1),
+  fin: wmat({ color: 0x2b231d, roughness: 0.7 }, 1),
+  steel: wmat({ color: 0xa8aaa8, roughness: 0.3, metalness: 0.8 }, 1),
+  doorGrey: wmat({ color: 0x3a3c40, roughness: 0.6, metalness: 0.3 }, 1),
+  mat: wmat({ color: 0x141416, roughness: 0.98 }, 1),
+  lampOn: std({ color: 0xffffff, emissive: 0xffc890, emissiveIntensity: 1.3, side: THREE.DoubleSide }),
+  lampDim: std({ color: 0xffffff, emissive: 0xffc890, emissiveIntensity: 0.35, side: THREE.DoubleSide }),
+  lampOff: std({ color: 0x4a4440, roughness: 0.5, side: THREE.DoubleSide }),
+  nose: std({ color: 0x000000, emissive: 0xffb060, emissiveIntensity: 1.5 }),
+  led: std({ color: 0x000000, emissive: 0x5a78c8, emissiveIntensity: 0.8 }),
+  seat: std({ color: 0xffffff, roughness: 0.9 }),
+  plastic: std({ color: 0x1a1a1c, roughness: 0.5 }),
+};
+const exitMat = std({ color: 0x000000, emissive: 0xffffff, emissiveMap: signTex(['EXIT'], '#160304', '#ff3a2e', 256, 96), emissiveIntensity: 2.2 });
+function exitSign(x, y, z, ry) { const m = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.16), exitMat); m.position.set(x, y, z); m.rotation.y = ry; stage.add(m); }
+function sign(text, bg, fg, w, h, x, y, z, ry, ei = 0.4, px = 512) { const t = signTex([text], bg, fg, px, Math.max(32, Math.round(px * h / w))); const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), std({ map: t, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: ei, roughness: 0.6 })); m.position.set(x, y, z); m.rotation.y = ry; stage.add(m); return m; }
+// a wall sconce: half a drum of frosted glass against the wall. side: which way it faces ('+x', '-x', '+z', '-z')
+function sconce(x, y, z, side, mat) { const g = new THREE.CylinderGeometry(0.09, 0.12, 0.24, 12, 1, false, 0, Math.PI); const ry = { '+x': 0, '-x': Math.PI, '+z': -Math.PI / 2, '-z': Math.PI / 2 }[side]; mgeo(mat, g, x, y, z, 0, ry); }
+function downlight(x, y, z, mat, r = 0.11) { mgeo(mat, new THREE.CircleGeometry(r, 16), x, y, z, Math.PI / 2); mgeo(MC.gold, new THREE.RingGeometry(r, r + 0.025, 16), x, y - 0.001, z, Math.PI / 2); }
+// a queue post: weighted base, chrome pole; belts (or ropes) are strung between them
+function qpost(x, z, fallen) {
+  if (fallen) { mgeo(MX.steel, new THREE.CylinderGeometry(0.025, 0.025, 0.95, 10), x, 0.16, z, 0, 0.6, Math.PI / 2 - 0.12); mgeo(MX.plastic, new THREE.CylinderGeometry(0.15, 0.16, 0.03, 18), x - 0.45, 0.15, z + 0.3, 0, 0, Math.PI / 2 - 0.12); return; }
+  mgeo(MX.plastic, new THREE.CylinderGeometry(0.15, 0.16, 0.03, 18), x, 0.015, z); mgeo(MX.steel, new THREE.CylinderGeometry(0.025, 0.025, 0.95, 10), x, 0.475, z); mgeo(MX.steel, new THREE.CylinderGeometry(0.035, 0.03, 0.05, 10), x, 0.97, z); solid(x - 0.04, x + 0.04, z - 0.04, z + 0.04, 0, 1.0);
+}
+const belt = std({ color: 0x5a1218, roughness: 0.6 });
+function qbelt(x0, z0, x1, z1) { const l = Math.hypot(x1 - x0, z1 - z0); mgeo(belt, new THREE.BoxGeometry(l, 0.05, 0.006), (x0 + x1) / 2, 0.88, (z0 + z1) / 2, 0, -Math.atan2(z1 - z0, x1 - x0)); }
+function qrope(x0, z0, x1, z1) { stage.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new V3(x0, 0.9, z0), new V3((x0 + x1) / 2, 0.7, (z0 + z1) / 2), new V3(x1, 0.9, z1)]), 14, 0.014, 6), MC.velvet)); }
+
 const HATCH2 = { x: DUCT_PATH[DUCT_PATH.length - 1][0], z: DUCT_PATH[DUCT_PATH.length - 1][1] };
-// -- box office: beige walls, linoleum, a counter under the ticket windows, one hanging lamp that cannot hold steady
+const FC = FOYER.c, WH = 1.0;   // the foyer's ceiling; the height of its panelling
+
+// -- the box office, in the front corner: beige walls, linoleum, a counter under three ticket windows, one hanging lamp that cannot hold steady
 slab(BOX.x0, BOX.x1, BOX.z0, BOX.z1, 0.002, MC.boFloor, false);
 slab(BOX.x0, BOX.x1, BOX.z0, BOX.z1, BOX.c, M.ceil, true, [HATCH2.x, HATCH2.z, HATCH_HW]);
-wallX(BOX.x1, BOX.z0, BOX.z1, BOX.c, MC.boWall);
-wallZ(BOX.z0, BOX.x0, BOX.x1, BOX.c, MC.boWall); wallZ(BOX.z1, BOX.x0, BOX.x1, BOX.c, MC.boWall);
-wallX(BOX.x0, BOX.z0, BOX.z1, BOX.c, MC.boWall, [[7.8, 8.6, 0, 1.6], [9.4, 11.4, 0.72, 1.42]]);   // the door out, and the ticket windows
-box(BOX.x0 - 0.01, BOX.x0 + 0.01, 0.72, 1.42, 9.4, 11.4, MC.ticketGlass);
-for (const z of [10.06, 10.73]) vbox(BOX.x0 - 0.03, BOX.x0 + 0.03, 0.72, 1.42, z - 0.025, z + 0.025, MC.frame);
-for (const zc of [9.73, 10.4, 11.07]) { const m = new THREE.Mesh(new THREE.CircleGeometry(0.05, 16), MC.frame); m.position.set(BOX.x0 + 0.012, 1.08, zc); m.rotation.y = Math.PI / 2; stage.add(m); }   // speaking holes
-{ const t = signTex(['TICKETS'], '#2a1410', '#e8c46a', 512, 128); const m = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.3), std({ map: t, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 0.18 })); m.position.set(BOX.x0 - 0.09, 1.7, 10.4); m.rotation.y = -Math.PI / 2; stage.add(m); }
-box(BOX.x0 + 0.08, BOX.x0 + 0.62, 0, 0.66, 9.2, 11.6, MC.boWall, true); vbox(BOX.x0 + 0.06, BOX.x0 + 0.66, 0.66, 0.7, 9.18, 11.62, MC.frame);   // the counter
-vbox(BOX.x0 + 0.2, BOX.x0 + 0.5, 0.7, 0.9, 10.2, 10.6, std({ color: 0x3a3836, roughness: 0.5, metalness: 0.3 }));   // the till
-vbox(BOX.x0 + 0.22, BOX.x0 + 0.48, 0.9, 0.98, 10.28, 10.52, std({ color: 0x1a2a20, emissive: 0x1a3a22, emissiveIntensity: 0.5 }));
-{ const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.1, 16), std({ color: 0xc94a3a, roughness: 0.7 })); roll.rotation.z = Math.PI / 2; roll.position.set(BOX.x0 + 0.35, 0.76, 9.6); stage.add(roll); }   // a roll of tickets
-for (let i = 0; i < 14; i++) { const m = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 0.05), MC.paper); m.rotation.x = -Math.PI / 2; m.rotation.z = rand() * 6; m.position.set(BOX.x0 + 0.8 + rand() * 2.6, 0.004 + i * 0.0003, 8.0 + rand() * 3.4); stage.add(m); }   // torn stubs on the floor
-{ const st = new THREE.Group(); const seat = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.04, 16), MC.velvet); seat.position.y = 0.52; st.add(seat); const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.02, 0.5, 8), MC.iron); leg.position.y = 0.26; st.add(leg); st.position.set(BOX.x0 + 1.0, 0, 10.9); st.rotation.z = 1.45; st.position.y = 0.14; stage.add(st); }   // the stool, knocked over
-vbox(BOX.x1 - 0.5, BOX.x1 - 0.08, 0, 1.1, 10.6, 11.6, std({ color: 0x5a5c4e, roughness: 0.6, metalness: 0.4 })); solid(BOX.x1 - 0.5, BOX.x1 - 0.08, 10.6, 11.6, 0, 1.1);   // a filing cabinet
+wallX(BOX.x1, BOX.z0, BOX.z1, BOX.c, MC.boWall); wallZ(BOX.z1, BOX.x0, BOX.x1, BOX.c, MC.boWall);
+wallZ(BOX.z0, BOX.x0, BOX.x1, BOX.c, MC.boWall, [[-3.1, -2.4, 0, 2.1]]);                       // its door, into the foyer
+wallX(BOX.x0, BOX.z0, BOX.z1, BOX.c, MC.boWall, [[11.3, 13.7, 0.72, 1.42]]);                     // the ticket windows, onto the foyer
+box(BOX.x0 - 0.01, BOX.x0 + 0.01, 0.72, 1.42, 11.3, 13.7, MC.ticketGlass);
+for (const z of [12.1, 12.9]) mbox(BOX.x0 - 0.04, BOX.x0 + 0.04, 0.72, 1.42, z - 0.025, z + 0.025, MC.frame);
+for (const zc of [11.7, 12.5, 13.3]) { const m = new THREE.Mesh(new THREE.CircleGeometry(0.05, 16), MC.frame); m.position.set(BOX.x0 + 0.012, 1.08, zc); m.rotation.y = Math.PI / 2; stage.add(m);   // speaking holes
+  mbox(BOX.x0 - 0.2, BOX.x0 + 0.2, 0.72, 0.745, zc - 0.16, zc + 0.16, MC.frame); }                                                  // and the trays under the glass
+// its foyer side: walnut, a marble sill, a brass band, the maroon bulkhead up to the foyer's ceiling, and the sign
+wallX(BOX.x0 - 0.09, BOX.z0, BOX.z1, BOX.c, MX.wood, [[11.3, 13.7, 0.72, 1.42]], 0.03, mbox);
+wallZ(BOX.z0 - 0.09, BOX.x0 - 0.105, BOX.x1, BOX.c, MX.wood, [[-3.1, -2.4, 0, 2.1]], 0.03, mbox);
+mbox(BOX.x0 - 0.075, BOX.x0 + 0.075, BOX.c, FC, BOX.z0, BOX.z1, MX.maroon); mbox(BOX.x0, BOX.x1, BOX.c, FC, BOX.z0 - 0.075, BOX.z0 + 0.075, MX.maroon);
+mbox(BOX.x0 - 0.13, BOX.x0 - 0.075, 2.42, 2.5, BOX.z0 - 0.13, BOX.z1, MC.gold); mbox(BOX.x0 - 0.13, BOX.x1, 2.42, 2.5, BOX.z0 - 0.13, BOX.z0 - 0.075, MC.gold);
+mbox(BOX.x0 - 0.42, BOX.x0 - 0.075, 0.72, 0.76, 11.2, 13.8, MX.marble);
+sign('TICKETS', '#2a1410', '#e8c46a', 1.6, 0.4, BOX.x0 - 0.085, 2.95, 12.5, -Math.PI / 2, 0.3);
+for (const zc of [11.7, 12.5, 13.3]) { const t = signTex([String((zc - 11.7) / 0.8 + 1 | 0)], '#1a0c0a', '#e8c46a', 64, 64); const m = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 0.12), std({ map: t, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 0.25 })); m.position.set(BOX.x0 - 0.11, 1.56, zc); m.rotation.y = -Math.PI / 2; stage.add(m); }   // window numbers
+{ const pv = new THREE.Group(); pv.position.set(-2.4, 0, BOX.z0 - 0.1); pv.rotation.y = -1.2; const d = new THREE.Mesh(new THREE.BoxGeometry(0.7, 2.08, 0.04), MX.wood); d.position.set(-0.35, 1.05, 0); pv.add(d); const k = new THREE.Mesh(new THREE.SphereGeometry(0.03, 10, 8), MC.gold); k.position.set(-0.6, 1.0, -0.04); pv.add(k); stage.add(pv); }   // its door, left open
+// inside it
+box(BOX.x0 + 0.08, BOX.x0 + 0.62, 0, 0.66, 11.1, 13.9, MC.boWall, true); vbox(BOX.x0 + 0.06, BOX.x0 + 0.66, 0.66, 0.7, 11.08, 13.92, MC.frame);   // the counter
+vbox(BOX.x0 + 0.2, BOX.x0 + 0.5, 0.7, 0.9, 12.3, 12.7, std({ color: 0x3a3836, roughness: 0.5, metalness: 0.3 }));                              // the till
+vbox(BOX.x0 + 0.22, BOX.x0 + 0.48, 0.9, 0.98, 12.38, 12.62, std({ color: 0x1a2a20, emissive: 0x1a3a22, emissiveIntensity: 0.5 }));
+{ const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.1, 16), std({ color: 0xc94a3a, roughness: 0.7 })); roll.rotation.z = Math.PI / 2; roll.position.set(BOX.x0 + 0.35, 0.76, 11.5); stage.add(roll); }   // a roll of tickets
+for (let i = 0; i < 6; i++) { const m = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 0.05), MC.paper); m.rotation.x = -Math.PI / 2; m.rotation.z = rand() * 6; m.position.set(BOX.x0 + 0.2 + rand() * 0.35, 0.702 + i * 0.0003, 13.0 + rand() * 0.8); stage.add(m); }   // stubs on the counter
+for (let i = 0; i < 16; i++) { const m = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 0.05), MC.paper); m.rotation.x = -Math.PI / 2; m.rotation.z = rand() * 6; m.position.set(BOX.x0 + 0.8 + rand() * 2.6, 0.004 + i * 0.0003, 10.6 + rand() * 3.6); stage.add(m); }   // and torn ones on the floor
+{ const st = new THREE.Group(); const seat = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.04, 16), MC.velvet); seat.position.y = 0.52; st.add(seat); const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.02, 0.5, 8), MC.iron); leg.position.y = 0.26; st.add(leg); st.position.set(BOX.x0 + 1.0, 0.14, 13.2); st.rotation.z = 1.45; stage.add(st); }   // the stool, knocked over
+vbox(BOX.x1 - 0.5, BOX.x1 - 0.08, 0, 1.1, 13.5, 14.5, std({ color: 0x5a5c4e, roughness: 0.6, metalness: 0.4 })); solid(BOX.x1 - 0.5, BOX.x1 - 0.08, 13.5, 14.5, 0, 1.1);   // a filing cabinet
+for (let i = 0; i < 3; i++) vbox(BOX.x1 - 0.51, BOX.x1 - 0.5, 0.12 + i * 0.34, 0.4 + i * 0.34, 13.6, 14.4, std({ color: 0x4a4c40, roughness: 0.5, metalness: 0.4 }));
+vbox(BOX.x0 + 0.1, BOX.x0 + 0.5, 0.05, 0.6, 13.95, 14.45, std({ color: 0x2c2e30, roughness: 0.4, metalness: 0.6 })); solid(BOX.x0 + 0.1, BOX.x0 + 0.5, 13.95, 14.45, 0, 0.6);   // the safe
+{ const c = new THREE.Group(); c.add(new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.04, 24), std({ color: 0xe8e2d0, roughness: 0.5 }))); const rim = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.015, 6, 24), MC.frame); rim.rotation.x = Math.PI / 2; c.add(rim);   // the clock, stopped
+  for (const [l, a] of [[0.11, 0.6], [0.14, 3.5]]) { const h = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.01, l), MC.frame); h.position.set(Math.sin(a) * l / 2, 0.025, Math.cos(a) * l / 2); h.rotation.y = a; c.add(h); }
+  c.rotation.z = Math.PI / 2; c.position.set(BOX.x1 - 0.1, 1.95, 11.4); stage.add(c); }
 const boLamp = { l: new THREE.PointLight(0xffc98a, 3.6, 8, 1.0), bulb: null, f: 1, next: 0 };
-{ const cord = vbox(-4.6 - 0.004, -4.6 + 0.004, 1.9, BOX.c, 9.2 - 0.004, 9.2 + 0.004, MC.frame); const shade = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.12, 16, 1, true), std({ color: 0x2e4a3a, side: THREE.DoubleSide, roughness: 0.6 })); shade.position.set(-4.6, 1.86, 9.2); stage.add(shade);
-  boLamp.bulb = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), std({ color: 0xffffff, emissive: 0xffd09a, emissiveIntensity: 2 })); boLamp.bulb.position.set(-4.6, 1.8, 9.2); stage.add(boLamp.bulb);
-  boLamp.l.position.set(-4.6, 1.76, 9.2); stage.add(boLamp.l); void cord; }
-// -- lobby: patterned carpet, maroon walls with a gold rail, the posters still up, the concession stand, the front doors chained
-slab(LOBBY.x0, LOBBY.x1, LOBBY.z0, LOBBY.z1, 0.003, MC.carpet, false); slab(LOBBY.x0, LOBBY.x1, LOBBY.z0, LOBBY.z1, LOBBY.c, MC.ceilDark, true);
-wallX(LOBBY.x0, LOBBY.z0, LOBBY.z1, LOBBY.c, MC.maroon, [[7.4, 10.6, 0.04, 2.3]]);
-box(LOBBY.x0 - 0.02, LOBBY.x0 + 0.02, 0.04, 2.3, 7.4, 10.6, MC.glassDark, true);   // the front doors: dark glass, nothing behind
-for (const z of [8.2, 9.0, 9.8]) vbox(LOBBY.x0 + 0.02, LOBBY.x0 + 0.05, 0.04, 2.3, z - 0.03, z + 0.03, MC.gold);
-for (let i = 0; i < 9; i++) { const l = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.009, 6, 12), MC.iron); l.position.set(LOBBY.x0 + 0.08, 1.05 + Math.sin(i * 0.7) * 0.05, 8.65 + i * 0.07); l.rotation.y = Math.PI / 2; l.rotation.x = i % 2 ? Math.PI / 2 : 0; stage.add(l); }   // the chain through the handles
-wallX(LOBBY.x1, LOBBY.z0, BOX.z0, LOBBY.c, MC.maroon); wallX(LOBBY.x1, BOX.z1, LOBBY.z1, LOBBY.c, MC.maroon);
-box(LOBBY.x1 - 0.075, LOBBY.x1 + 0.075, BOX.c, LOBBY.c, BOX.z0, BOX.z1, MC.maroon);   // over the box office
-wallZ(LOBBY.z1, LOBBY.x0, LOBBY.x1, LOBBY.c, MC.maroon);
-wallZ(LOBBY.z0, LOBBY.x0, LOBBY.x1, LOBBY.c, MC.maroon, [[-7.3, -6.5, 0, 2.8]]);   // the way in to the screen
-for (let k = 1; k <= 5; k++) box(-7.35, -6.45, 0, k * 0.12, 3.7, 4.0 + (6 - k) * 0.3, MC.carpet, true);   // up five steps: the doorway is level with the back row
-for (const [z0, z1, x] of [[LOBBY.z0, LOBBY.z1, LOBBY.x0 + 0.08]]) vbox(x - 0.01, x + 0.02, 0.9, 0.94, z0, z1, MC.gold);
-vbox(LOBBY.x0, LOBBY.x1, 0.9, 0.94, LOBBY.z1 - 0.09, LOBBY.z1 - 0.07, MC.gold);
-{ // posters in lightboxes, most of the tubes behind them dead
-  const titles = [['THE LONG', 'HALLWAY', '#1c2a4a', '#e9d9a8'], ['NIGHT', 'POOL', '#0f3a3a', '#a8f0e0'], ['MOON', 'STATION', '#14141c', '#d8dce8'], ['GREY', 'STAIRS', '#3a3a3a', '#f0f0f0'], ['WELCOME', 'BACK', '#5a1a1a', '#ffd88a']];
-  const spots = [[-11.0, 13.9, 0], [-9.4, 13.9, 0], [-7.8, 13.9, 0], [-11.9, 5.4, 1], [-11.9, 12.4, 1]];
-  spots.forEach(([x, z, side], i) => {
-    const [a, b, bg, fg] = titles[i], c = document.createElement('canvas'); c.width = 256; c.height = 384; const g = c.getContext('2d');
-    g.fillStyle = bg; g.fillRect(0, 0, 256, 384); const gr = g.createRadialGradient(128, 150, 10, 128, 150, 180); gr.addColorStop(0, 'rgba(255,255,255,0.18)'); gr.addColorStop(1, 'rgba(0,0,0,0.4)'); g.fillStyle = gr; g.fillRect(0, 0, 256, 384);
-    g.fillStyle = fg; g.font = 'bold 40px Georgia, serif'; g.textAlign = 'center'; g.fillText(a, 128, 270); g.fillText(b, 128, 316); g.font = '14px Georgia, serif'; g.globalAlpha = 0.6; g.fillText('COMING SOON', 128, 352); g.globalAlpha = 1;
-    g.strokeStyle = fg; g.globalAlpha = 0.5; g.lineWidth = 3; g.beginPath(); g.arc(128, 140, 60 + i * 6, 0, 7); g.stroke(); g.globalAlpha = 1;
-    for (let k = 0; k < 2200; k++) { g.fillStyle = `rgba(0,0,0,${Math.random() * 0.2})`; g.fillRect(Math.random() * 256, Math.random() * 384, 2, 2); }
-    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
-    const lit = i === 2 ? 0.9 : 0.3, m = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.93), std({ map: t, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: lit, roughness: 0.4 }));
-    if (side) { m.position.set(x + 0.06, 1.35, z); m.rotation.y = Math.PI / 2; vbox(x - 0.02, x + 0.05, 0.84, 1.86, z - 0.37, z + 0.37, MC.gold); }
-    else { m.position.set(x, 1.35, z - 0.06); m.rotation.y = Math.PI; vbox(x - 0.37, x + 0.37, 0.84, 1.86, z - 0.05, z + 0.02, MC.gold); }
-    stage.add(m);
-  });
-}
-{ // the concession stand, the popcorn machine on it still half full
-  box(-11.4, -8.8, 0, 0.95, 12.3, 13.1, MC.maroon, true); vbox(-11.45, -8.75, 0.95, 0.99, 12.25, 13.15, MC.gold);
-  vbox(-11.38, -8.82, 0.1, 0.85, 12.28, 12.3, MC.glassDark);
+{ vbox(-4.6 - 0.004, -4.6 + 0.004, 1.9, BOX.c, 12.0 - 0.004, 12.0 + 0.004, MC.frame); const shade = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.12, 16, 1, true), std({ color: 0x2e4a3a, side: THREE.DoubleSide, roughness: 0.6 })); shade.position.set(-4.6, 1.86, 12.0); stage.add(shade);
+  boLamp.bulb = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), std({ color: 0xffffff, emissive: 0xffd09a, emissiveIntensity: 2 })); boLamp.bulb.position.set(-4.6, 1.8, 12.0); stage.add(boLamp.bulb);
+  boLamp.l.position.set(-4.6, 1.76, 12.0); stage.add(boLamp.l); }
+
+// -- the foyer: patterned carpet, walnut to a brass rail, maroon above, coffered ceiling with most of its downlights dead
+mplane(FOYER.x0, BOX.x0, FOYER.z0, FOYER.z1, 0.003, MX.carpet); mplane(BOX.x0, FOYER.x1, FOYER.z0, BOX.z0, 0.003, MX.carpet);
+mplane(FOYER.x0, BOX.x0, FOYER.z0, FOYER.z1, FC, MX.ceil, true); mplane(BOX.x0, FOYER.x1, FOYER.z0, BOX.z0, FC, MX.ceil, true);
+const DOORS = [-15.2, -8.2];   // the bank of front doors in the street wall
+wallZ(FOYER.z1, FOYER.x0, BOX.x0, FC, MX.maroon, [[DOORS[0], DOORS[1], 0.04, 2.6]], 0.15, mbox);
+wallX(FOYER.x0, FOYER.z0, FOYER.z1, FC, MX.maroon, [], 0.15, mbox);
+wallZ(FOYER.z0, FOYER.x0, CORR.x0, FC, MX.maroon, [], 0.15, mbox); mbox(CORR.x0, FOYER.x1, CORR.c, FC, FOYER.z0 - 0.075, FOYER.z0 + 0.075, MX.maroon);   // the back wall, and the header over the way to the screen
+wallX(FOYER.x1, FOYER.z0, BOX.z0, FC, MX.maroon, [], 0.15, mbox);
+// panelling and rails, all round
+{ const runs = [['x', FOYER.x0 + 0.075, FOYER.z0 + 0.075, FOYER.z1 - 0.075, 1], ['z', FOYER.z0 + 0.075, FOYER.x0 + 0.075, CORR.x0, 1], ['z', FOYER.z1 - 0.075, FOYER.x0 + 0.075, DOORS[0] - 0.05, -1], ['z', FOYER.z1 - 0.075, DOORS[1] + 0.05, BOX.x0 - 0.105, -1], ['x', FOYER.x1 - 0.075, FOYER.z0 + 0.075, BOX.z0 - 0.105, -1]];
+  for (const [ax, p, a0, a1, s] of runs) {
+    const pan = (t0, t1, y0, y1, out, m) => ax === 'x' ? mbox(Math.min(p, p + s * out), Math.max(p, p + s * out), y0, y1, a0, a1, m) : mbox(a0, a1, y0, y1, Math.min(p, p + s * out), Math.max(p, p + s * out), m);
+    pan(0, 0, 0, WH, 0.03, MX.wood); pan(0, 0, WH, WH + 0.04, 0.05, MC.gold); pan(0, 0, 0, 0.12, 0.045, MX.beam); pan(0, 0, FC - 0.14, FC, 0.07, MX.beam);
+  } }
+// the front doors: dark glass in brass frames, a chain through the middle pair of handles
+box(DOORS[0], DOORS[1], 0.04, 2.6, FOYER.z1 - 0.02, FOYER.z1 + 0.02, MC.glassDark, true);
+for (let i = 0; i <= 4; i++) { const x = DOORS[0] + i * (DOORS[1] - DOORS[0]) / 4; mbox(x - 0.045, x + 0.045, 0.04, 2.6, FOYER.z1 - 0.06, FOYER.z1 + 0.03, MC.gold); }
+mbox(DOORS[0] - 0.05, DOORS[1] + 0.05, 2.56, 2.68, FOYER.z1 - 0.06, FOYER.z1 + 0.03, MC.gold); mbox(DOORS[0], DOORS[1], 0.04, 0.22, FOYER.z1 - 0.05, FOYER.z1 - 0.02, MC.gold);
+for (let i = 0; i < 4; i++) { const x0 = DOORS[0] + i * 1.75; if (i === 1 || i === 2) mbox(x0 + (i === 1 ? 1.55 : 0.12), x0 + (i === 1 ? 1.63 : 0.2), 0.85, 1.35, FOYER.z1 - 0.12, FOYER.z1 - 0.06, MC.gold); else mbox(x0 + 0.25, x0 + 1.5, 1.0, 1.05, FOYER.z1 - 0.1, FOYER.z1 - 0.05, MC.gold); }   // pulls on the middle pair, push bars on the others
+{ const cx = (DOORS[0] + DOORS[1]) / 2; for (let i = 0; i < 9; i++) { const l = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.009, 6, 12), MC.iron); l.position.set(cx - 0.28 + i * 0.07, 1.1 + Math.sin(i * 0.7) * 0.04 - (i > 2 && i < 6 ? 0.05 : 0), FOYER.z1 - 0.15); l.rotation.y = i % 2 ? Math.PI / 2 : 0; stage.add(l); }
+  vbox(cx - 0.05, cx + 0.05, 0.92, 1.02, FOYER.z1 - 0.17, FOYER.z1 - 0.13, MC.iron); }   // the chain and its padlock
+mbox(DOORS[0] + 0.4, DOORS[1] - 0.4, 0, 0.012, FOYER.z1 - 1.3, FOYER.z1 - 0.1, MX.mat);   // the door mat
+// coffered ceiling
+for (const z of [6.9, 8.8, 10.7, 12.7]) mbox(FOYER.x0, z < BOX.z0 ? FOYER.x1 : BOX.x0, FC - 0.24, FC, z - 0.12, z + 0.12, MX.beam);
+for (const x of [-16.0, -13.6, -11.2, -8.8, -6.4, -4.1]) mbox(x - 0.12, x + 0.12, FC - 0.24, FC, FOYER.z0, x > BOX.x0 ? BOX.z0 : FOYER.z1, MX.beam);
+{ const xs = [-17.0, -14.8, -12.4, -10.0, -7.6, -5.2, -3.15], zs = [5.95, 7.85, 9.75, 11.7, 13.65]; let n = 0;
+  for (const x of xs) for (const z of zs) { if (inR(BOX, x, z)) continue; n++; downlight(x, FC - 0.25, z, n % 7 === 3 ? MX.lampDim : MX.lampOff); } }
+// a pendant over the middle (the foyer's one working light), sconces on the bare walls
+const lobbyLamp = new THREE.PointLight(0xffb070, 7.0, 15, 1.0); lobbyLamp.position.set(-11.0, 2.85, 9.8); stage.add(lobbyLamp);
+{ vbox(-11.004, -10.996, 3.0, FC - 0.24, 9.796, 9.804, MC.frame); const sh = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.34, 0.26, 20, 1, true), std({ color: 0xffe0b0, emissive: 0xffc070, emissiveIntensity: 0.9, side: THREE.DoubleSide })); sh.position.set(-11.0, 2.9, 9.8); stage.add(sh); }
+for (const z of [7.2, 9.8, 12.4]) sconce(FOYER.x0 + 0.105, 2.3, z, '+x', z === 9.8 ? MX.lampOn : MX.lampDim);
+sconce(-8.0, 2.3, FOYER.z0 + 0.105, '+z', MX.lampOn); sconce(-6.0, 2.3, FOYER.z0 + 0.105, '+z', MX.lampOff);
+// two round columns with brass bands
+for (const x of [-14.2, -7.8]) { const z = 9.4; mgeo(MX.maroon, new THREE.CylinderGeometry(0.28, 0.28, FC - 0.24, 20), x, (FC - 0.24) / 2, z); mgeo(MX.beam, new THREE.CylinderGeometry(0.33, 0.35, 0.3, 20), x, 0.15, z);
+  for (const y of [WH + 0.02, FC - 0.55]) mgeo(MC.gold, new THREE.CylinderGeometry(0.3, 0.3, 0.05, 20), x, y, z); mgeo(MX.beam, new THREE.CylinderGeometry(0.38, 0.3, 0.2, 20), x, FC - 0.34, z); solid(x - 0.33, x + 0.33, z - 0.33, z + 0.33, 0, FC); }
+// benches along the west wall
+for (const [z0, z1] of [[6.4, 8.4], [10.6, 12.6]]) { mbox(FOYER.x0 + 0.15, FOYER.x0 + 0.62, 0.38, 0.46, z0, z1, MX.maroon, true); mbox(FOYER.x0 + 0.105, FOYER.x0 + 0.2, 0.46, 0.92, z0, z1, MX.maroon);
+  for (const z of [z0 + 0.1, z1 - 0.1]) mbox(FOYER.x0 + 0.2, FOYER.x0 + 0.58, 0, 0.38, z - 0.03, z + 0.03, MC.gold); }
+// the box office queue: belt posts (one knocked down)
+qpost(-7.4, 10.9); qpost(-7.4, 12.4); qpost(-7.4, 13.9); qpost(-8.6, 12.4); qpost(-8.6, 13.9); qpost(-8.6, 10.9, true);
+qbelt(-7.4, 10.9, -7.4, 12.4); qbelt(-7.4, 12.4, -7.4, 13.9); qbelt(-8.6, 12.4, -8.6, 13.9);
+mgeo(belt, new THREE.BoxGeometry(1.0, 0.05, 0.006), -8.1, 0.01, 11.5, Math.PI / 2, 0.7);   // its belt, lying on the carpet
+{ // the concession stand along the back wall: a back counter with the drinks machine, the front counter with the candy case, menus above
+  const X0 = -16.8, X1 = -10.8;
+  mbox(X0, X1, 0, 0.9, FOYER.z0 + 0.075, 5.65, MX.wood, true); mbox(X0 - 0.02, X1 + 0.02, 0.9, 0.94, FOYER.z0 + 0.075, 5.68, MX.marble);
+  mbox(X0, X1 - 0.8, 0, 0.12, 6.75, 7.45, MX.beam, true); mbox(X0, X1 - 0.8, 0.12, 0.98, 6.75, 7.2, MX.maroon, true);   // the front counter, open at its east end
+  mbox(X0 - 0.03, X1 - 0.77, 0.98, 1.02, 6.72, 7.48, MX.marble); mbox(X0, X1 - 0.8, 0.12, 0.98, 7.2, 7.215, MX.black); solid(X0, X1 - 0.8, 6.75, 7.45, 0, 1.02);
+  mbox(X0, X1 - 0.8, 0.5, 0.52, 7.21, 7.43, MX.steel);
+  box(X0 + 0.05, X1 - 0.85, 0.14, 0.96, 7.45, 7.47, MC.glassDark);
+  for (const y of [0.15, 0.53]) for (let x = X0 + 0.15; x < X1 - 1.0; x += 0.17 + rand() * 0.05) if (rand() > 0.3) goods.push({ x, y: y + 0.09, z: 7.32, sx: 0.12, sy: 0.18, sz: 0.06, c: new THREE.Color(pick(PALETTE)), lean: (rand() - 0.5) * 0.2 });   // candy boxes behind the glass
+  // the drinks machine on the back counter: a steel body, six nozzles, the drip tray, the backlit panel long dead
+  mbox(-15.8, -14.2, 0.94, 1.7, 5.15, 5.6, MX.steel); mbox(-15.75, -14.25, 1.32, 1.66, 5.6, 5.62, std({ color: 0x1a2430, emissive: 0x2a4060, emissiveIntensity: 0.15 }));
+  for (let i = 0; i < 6; i++) mgeo(MX.plastic, new THREE.CylinderGeometry(0.02, 0.025, 0.08, 8), -15.6 + i * 0.24, 1.16, 5.66);
+  mbox(-15.75, -14.25, 0.94, 0.97, 5.55, 5.82, MX.steel);
+  for (let i = 0; i < 3; i++) mgeo(std({ color: [0xe8e4da, 0xc83a2a, 0x2a62c8][i], roughness: 0.5 }), new THREE.CylinderGeometry(0.05, 0.04, 0.4, 12, 1, true), -13.8 + i * 0.16, 1.14, 5.4);   // cup stacks
+  // the till, napkins, straws on the front counter
+  mbox(-14.7, -14.3, 1.02, 1.12, 6.85, 7.15, MX.plastic); mbox(-14.66, -14.34, 1.12, 1.32, 6.95, 6.98, std({ color: 0x0e1812, emissive: 0x143020, emissiveIntensity: 0.35 }));
+  mbox(-16.3, -16.1, 1.02, 1.2, 7.0, 7.2, MX.steel); mgeo(MX.steel, new THREE.CylinderGeometry(0.05, 0.05, 0.22, 12, 1, true), -15.9, 1.13, 7.1);
+  // the popcorn machine, still half full
   const pm = new THREE.Group(), red = std({ color: 0xa8241e, roughness: 0.5 });
-  const base = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.18, 0.4), red); base.position.y = 0.09; pm.add(base);
-  const cab = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.4), MC.ticketGlass); cab.position.y = 0.43; pm.add(cab);
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.1, 0.44), red); roof.position.y = 0.73; pm.add(roof);
-  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.5, 0.02), MC.gold); p.position.set(sx * 0.24, 0.43, sz * 0.19); pm.add(p); }
-  const corn = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.14, 0.36), std({ color: 0xe8d28a, roughness: 0.95 })); corn.position.y = 0.25; pm.add(corn);
-  pm.position.set(-10.5, 0.99, 12.7); stage.add(pm);
-  { const t = signTex(['POPCORN · SODA · CANDY'], '#3a0d14', '#e8c46a', 1024, 96); const m = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 0.2), std({ map: t, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 0.12 })); m.position.set(-10.1, 2.3, 13.86); m.rotation.y = Math.PI; stage.add(m); }
+  const base = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.2, 0.46), red); base.position.y = 0.1; pm.add(base);
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.56, 0.46), MC.ticketGlass); cab.position.y = 0.48; pm.add(cab);
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.12, 0.5), red); roof.position.y = 0.82; pm.add(roof);
+  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.56, 0.02), MC.gold); p.position.set(sx * 0.29, 0.48, sz * 0.22); pm.add(p); }
+  const corn = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.16, 0.42), std({ color: 0xe8d28a, roughness: 0.95 })); corn.position.y = 0.28; pm.add(corn);
+  const kettle = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.07, 0.1, 14), MX.steel); kettle.position.y = 0.66; pm.add(kettle);
+  pm.position.set(-12.0, 1.02, 7.05); stage.add(pm);
+  // the menus over the back counter: three boards of sizes and prices, one gone dark
+  const board = (title, lines, x, lit) => { const c = document.createElement('canvas'); c.width = 512; c.height = 320; const g = c.getContext('2d');
+    g.fillStyle = '#120a08'; g.fillRect(0, 0, 512, 320); g.strokeStyle = '#7a5a1e'; g.lineWidth = 4; g.strokeRect(8, 8, 496, 304);
+    g.fillStyle = '#e8c46a'; g.font = 'bold 54px Georgia, serif'; g.textAlign = 'center'; g.fillText(title, 256, 76);
+    g.font = '30px Georgia, serif'; lines.forEach(([a, b], i) => { g.textAlign = 'left'; g.fillStyle = '#d8cdb0'; g.fillText(a, 44, 140 + i * 52); g.textAlign = 'right'; g.fillText(b, 468, 140 + i * 52); g.fillStyle = 'rgba(216,205,176,0.35)'; for (let x = 44 + g.measureText(a).width + 60; x < 380; x += 14) g.fillRect(x, 134 + i * 52, 4, 4); });
+    for (let k = 0; k < 2000; k++) { g.fillStyle = `rgba(0,0,0,${Math.random() * 0.3})`; g.fillRect(Math.random() * 512, Math.random() * 320, 2, 2); }
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 1.125), std({ map: t, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: lit, roughness: 0.4 })); m.position.set(x, 2.35, FOYER.z0 + 0.12); stage.add(m);
+    mbox(x - 0.94, x + 0.94, 1.75, 2.95, FOYER.z0 + 0.075, FOYER.z0 + 0.11, MX.beam); };
+  board('POPCORN', [['SMALL', '3.50'], ['MEDIUM', '4.75'], ['LARGE', '5.95']], -15.6, 0.5);
+  board('SODA', [['SMALL', '2.75'], ['MEDIUM', '3.50'], ['LARGE', '4.25']], -13.7, 0.06);
+  board('CANDY', [['BOX', '2.50'], ['BAG', '3.25'], ['NACHOS', '4.50']], -11.8, 0.5);
+  sign('CONCESSIONS', '#3a0d14', '#e8c46a', 2.4, 0.26, -13.7, 3.22, FOYER.z0 + 0.12, 0, 0.18, 1024);
+  const l3 = new THREE.PointLight(0xffd0a0, 2.6, 7, 1.0); l3.position.set(-13.8, 2.5, 6.6); stage.add(l3);
 }
-for (const [x, z] of [[-7.9, 4.6], [-7.9, 5.6], [-5.95 - 0.9, 5.6]]) { vbox(x - 0.02, x + 0.02, 0, 0.62, z - 0.02, z + 0.02, MC.gold); const b = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), MC.gold); b.position.set(x, 0.64, z); stage.add(b); solid(x - 0.04, x + 0.04, z - 0.04, z + 0.04, 0, 0.66); }   // stanchions
-{ const rope = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new V3(-7.9, 0.6, 4.6), new V3(-7.9, 0.42, 5.1), new V3(-7.9, 0.6, 5.6)]), 12, 0.012, 6), MC.velvet); stage.add(rope); }
-{ const t = signTex(['SCREEN 1'], '#1a0a0c', '#e8c46a', 512, 128); const m = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.2), std({ map: t, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 0.4 })); m.position.set(-6.9, 2.45, LOBBY.z0 + 0.09); stage.add(m); }
-const lobbyLamp = new THREE.PointLight(0xffb070, 6.0, 12, 1.0); lobbyLamp.position.set(-9.4, 2.6, 8.5); stage.add(lobbyLamp);
-{ const l2 = new THREE.PointLight(0xffa860, 3.0, 8, 1.0); l2.position.set(-7.6, 2.5, 5.0); stage.add(l2); const l3 = new THREE.PointLight(0xffd0a0, 2.5, 6, 1.0); l3.position.set(-10.1, 2.0, 12.6); stage.add(l3); }   // a sconce by the stairs to the screen; the concession stand's own light
-{ const sc = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 0.16, 12, 1, true), std({ color: 0xffe0b0, emissive: 0xffc070, emissiveIntensity: 0.9, side: THREE.DoubleSide })); sc.position.set(-9.4, 2.62, 8.5); stage.add(sc); }
-// -- the screen: dark fabric walls, rows of red seats stepping up to the back, the screen still faintly lit by nothing
-slab(HALL.x0, HALL.x1, HALL.z0, HALL.z1, 0.003, MC.carpet, false); slab(HALL.x0, HALL.x1, HALL.z0, HALL.z1, HALL.c, MC.ceilDark, true);
-wallX(HALL.x0, HALL.z0, HALL.z1, HALL.c, MC.fabric); wallX(HALL.x1, HALL.z0, HALL.z1, HALL.c, MC.fabric);
-wallZ(HALL.z0, HALL.x0, HALL.x1, HALL.c, MC.fabric);
-wallZ(HALL.z1, HALL.x0, HALL.x1, HALL.c, MC.fabric, [[-7.3, -6.5, 0, 2.8], [-9.6, -9.0, 3.1, 3.5]]);   // the door in, and the projection window
-box(-9.6, -9.0, 3.1, 3.5, HALL.z1 - 0.01, HALL.z1 + 0.01, MC.glassDark);
-box(HALL.x0, HALL.x1, 0, 0.32, HALL.z0, -7.0, MC.fabric, true);   // the low stage under the screen
-const ROWS = 6, ROW0 = -3.8, ROWD = 1.05, RISE = 0.12;
-for (let k = 1; k < ROWS; k++) box(HALL.x0, HALL.x1, 0, k * RISE, ROW0 + k * ROWD - 0.5, HALL.z1, MC.carpet, true);   // the tiers: each step one rise higher
+{ // the ticket check, where the foyer gives onto the corridor: a lectern, brass posts and velvet rope making two lanes
+  const x = (CORR.x0 + CORR.x1) / 2;
+  mbox(x - 0.25, x + 0.25, 0, 1.0, 5.6, 5.95, MX.wood, true); mbox(x - 0.3, x + 0.3, 1.0, 1.04, 5.55, 6.0, MC.gold); mbox(x - 0.2, x + 0.05, 1.04, 1.06, 5.65, 5.85, MC.paper);
+  mgeo(MC.ticketGlass, new THREE.BoxGeometry(0.22, 0.26, 0.22), x + 0.4, 0.13, 6.2); solid(x + 0.29, x + 0.51, 6.09, 6.31, 0, 0.26);   // the stub box
+  const bp = (px, pz) => { mgeo(MC.gold, new THREE.CylinderGeometry(0.14, 0.16, 0.04, 16), px, 0.02, pz); mgeo(MC.gold, new THREE.CylinderGeometry(0.022, 0.022, 0.9, 10), px, 0.47, pz); mgeo(MC.gold, new THREE.SphereGeometry(0.045, 10, 8), px, 0.95, pz); solid(px - 0.04, px + 0.04, pz - 0.04, pz + 0.04, 0, 1.0); };
+  for (const px of [CORR.x0 - 0.3, CORR.x1 - 0.35]) { bp(px, 6.4); bp(px, 7.9); qrope(px, 6.4, px, 7.9); }
+  sign('SCREEN 1', '#1a0a0c', '#e8c46a', 1.6, 0.4, x, 3.5, FOYER.z0 + 0.085, 0, 0.45);
+  sconce(CORR.x0 - 0.3, 2.4, FOYER.z0 + 0.105, '+z', MX.lampOn);
+  const l2 = new THREE.PointLight(0xffa860, 2.6, 8, 1.0); l2.position.set(x, 2.8, 6.0); stage.add(l2);
+}
+
+// -- the corridor: carpet, panelling, sconces every few metres, down the side of the hall to its door near the screen end
+mplane(CORR.x0, CORR.x1, CORR.z0, CORR.z1, 0.003, MX.carpet); mplane(CORR.x0, CORR.x1, CORR.z0, CORR.z1, CORR.c, MX.ceil, true);
+const HDOOR = [-6.4, -4.0];   // the door into the hall, in its east wall
+wallX(CORR.x1, CORR.z0, CORR.z1, CORR.c, MX.maroon, [], 0.15, mbox); wallX(CORR.x0, HALL.z1, CORR.z1, CORR.c, MX.maroon, [], 0.15, mbox); wallZ(CORR.z0, CORR.x0, CORR.x1, CORR.c, MX.maroon, [], 0.15, mbox);
+mbox(CORR.x0 + 0.075, CORR.x0 + 0.1, 0, CORR.c, CORR.z0 + 0.075, HDOOR[0], MX.maroon); mbox(CORR.x0 + 0.075, CORR.x0 + 0.1, 0, CORR.c, HDOOR[1], CORR.z1, MX.maroon); mbox(CORR.x0 + 0.075, CORR.x0 + 0.1, 2.9, CORR.c, HDOOR[0], HDOOR[1], MX.maroon);   // the hall's wall, faced on this side
+for (const [x, s, segs] of [[CORR.x0 + 0.1, 1, [[CORR.z0 + 0.075, HDOOR[0]], [HDOOR[1], CORR.z1]]], [CORR.x1 - 0.075, -1, [[CORR.z0 + 0.075, CORR.z1]]]]) for (const [a, b] of segs) {
+  mbox(Math.min(x, x + s * 0.03), Math.max(x, x + s * 0.03), 0, WH, a, b, MX.wood); mbox(Math.min(x, x + s * 0.05), Math.max(x, x + s * 0.05), WH, WH + 0.04, a, b, MC.gold); mbox(Math.min(x, x + s * 0.06), Math.max(x, x + s * 0.06), CORR.c - 0.12, CORR.c, a, b, MX.beam); }
+for (const z of [3.2, 0.2, -2.8]) sconce(CORR.x0 + 0.1, 2.15, z, '+x', z === 0.2 ? MX.lampOff : MX.lampDim);
+for (const z of [1.7, -1.3, -4.3]) sconce(CORR.x1 - 0.075, 2.15, z, '-x', z === -4.3 ? MX.lampOn : MX.lampDim);
+for (const z of [3.8, 1.3, -1.2, -3.7, -6.2]) downlight((CORR.x0 + CORR.x1) / 2, CORR.c - 0.004, z, z === -3.7 || z === 1.3 ? MX.lampDim : MX.lampOff);
+{ const l = new THREE.PointLight(0xffc890, 1.6, 7, 1.0); l.position.set((CORR.x0 + CORR.x1) / 2, CORR.c - 0.3, 1.3); stage.add(l); }   // one downlight halfway along still working
+// the door: a brass frame, the sign over it
+mbox(CORR.x0 + 0.1, CORR.x0 + 0.15, 0, 2.95, HDOOR[0] - 0.08, HDOOR[0], MC.gold); mbox(CORR.x0 + 0.1, CORR.x0 + 0.15, 0, 2.95, HDOOR[1], HDOOR[1] + 0.08, MC.gold); mbox(CORR.x0 + 0.1, CORR.x0 + 0.15, 2.9, 2.98, HDOOR[0] - 0.08, HDOOR[1] + 0.08, MC.gold);
+sign('SCREEN 1', '#1a0a0c', '#e8c46a', 0.72, 0.18, CORR.x0 + 0.16, 3.08, (HDOOR[0] + HDOOR[1]) / 2, Math.PI / 2, 0.5);
+{ const l = new THREE.PointLight(0xffb070, 3.2, 9, 1.0); l.position.set(CORR.x1 - 0.5, 2.5, -4.3); stage.add(l); }
+// a caution sign and a mop bucket someone left
+{ const y = std({ color: 0xe8c22a, roughness: 0.5 }); for (const s of [-1, 1]) mgeo(y, new THREE.BoxGeometry(0.3, 0.6, 0.012), CORR.x1 - 0.45, 0.29, 1.6 + s * 0.09, s * 0.3); mgeo(y, new THREE.CylinderGeometry(0.17, 0.15, 0.32, 16), CORR.x1 - 0.4, 0.16, 0.9); solid(CORR.x1 - 0.6, CORR.x1 - 0.2, 0.7, 1.75, 0, 0.62);
+  mgeo(MC.iron, new THREE.CylinderGeometry(0.012, 0.012, 1.2, 6), CORR.x1 - 0.42, 0.75, 0.85, 0.2, 0, -0.25); }
+
+// -- the hall
+const ROWS = 18, ROW0 = -8.2, ROWD = 1.15, RISE = 0.42;   // rows from the front (A, at floor level, 7 m from the screen) to the back (R, 7 m up)
+const rz = (k) => ROW0 - k * ROWD, rE = (k) => rz(k) + ROWD / 2, rh = (k) => k * RISE;   // row k: its seats' line, the front edge of its tier, its height
+const HX0 = HALL.x0 + 0.075, HX1 = HALL.x1 - 0.075, HZ0 = HALL.z0 + 0.075, HZ1 = HALL.z1 - 0.075;   // the inside faces of its walls
+const AISLES = [[HX0, HX0 + 1.2], [-23.525, -22.325], [-12.675, -11.475], [HX1 - 1.2, HX1]];
+const BLOCKS = [[HX0 + 1.2, -23.525], [-22.325, -12.675], [-11.475, HX1 - 1.2]];
+const floorAt = (z) => (z > rE(1) ? 0 : rh(Math.min(ROWS - 1, Math.floor((rE(1) - z) / ROWD) + 1)));
+mplane(HALL.x0, HALL.x1, HALL.z0, HALL.z1, 0.003, MX.hallCarpet); mplane(HALL.x0, HALL.x1, HALL.z0, HALL.z1, HALL.c, MX.hallCeil, true);
+wallZ(HALL.z1, HALL.x0, HALL.x1, HALL.c, MX.black, [], 0.15, mbox);                                   // the screen wall
+wallX(HALL.x1, HALL.z0, HALL.z1, HALL.c, MX.acoustic, [[HDOOR[0], HDOOR[1], 0, 2.9]], 0.15, mbox);     // the side the corridor comes in by
+wallX(HALL.x0, HALL.z0, HALL.z1, HALL.c, MX.acoustic, [], 0.15, mbox); wallZ(HALL.z0, HALL.x0, HALL.x1, HALL.c, MX.acoustic, [], 0.15, mbox);
+// the stage under the screen, its lip picked out by a dim strip
+mbox(HX0, HX1, 0, 0.9, -2.75, HZ1, MX.black, true); mbox(HX0, HX1, 0.86, 0.885, -2.77, -2.75, MX.led);
+// the tiers and the stepped aisles: each row 42 cm above the one in front; in the aisles, three steps between rows and a landing at each
+const noses = [];
+for (const [x0, x1] of BLOCKS) for (let k = 1; k < ROWS; k++) mbox(x0, x1, 0, rh(k), k === ROWS - 1 ? HZ0 : rE(k + 1), rE(k), MX.hallCarpet, true);
+{ const Q = (0.22 + ROWD / 2) / 3;
+  for (const [x0, x1] of AISLES) {
+    for (let k = 1; k < ROWS; k++) { mbox(x0, x1, 0, rh(k), k === ROWS - 1 ? HZ0 : rz(k) + 0.22, rE(k), MX.hallCarpet, true); noses.push([x0, x1, rh(k), rE(k)]); }
+    for (let k = 0; k < ROWS - 1; k++) for (let j = 1; j <= 3; j++) { const zf = rz(k) + 0.22 - (j - 1) * Q, y = rh(k) + j * RISE / 4; mbox(x0, x1, 0, y, zf - Q, zf, MX.hallCarpet, true); noses.push([x0, x1, y, zf]); }
+  } }
+{ const im = new THREE.InstancedMesh(boxGeo, MX.nose, noses.length), o = new THREE.Object3D();   // a lit nosing on every step
+  noses.forEach(([x0, x1, y, z], i) => { o.position.set((x0 + x1) / 2, y - 0.005, z - 0.01); o.scale.set(x1 - x0 - 0.12, 0.012, 0.025); o.updateMatrix(); im.setMatrixAt(i, o.matrix); }); stage.add(im); }
+// the seats: red velvet gone dull, tall backs, armrests with cupholders; a few gone, a third folded up
 {
-  const seatG = new RoundedBoxGeometry(0.4, 0.1, 0.38, 2, 0.03), backG = new RoundedBoxGeometry(0.4, 0.46, 0.08, 2, 0.03), armG = new THREE.BoxGeometry(0.05, 0.05, 0.4);
-  const seats = [], backs = [], arms = [];
+  const seatG = new RoundedBoxGeometry(0.46, 0.1, 0.42, 2, 0.03), backG = new RoundedBoxGeometry(0.46, 0.68, 0.09, 2, 0.035), armG = new RoundedBoxGeometry(0.06, 0.05, 0.46, 1, 0.02), stdG = new THREE.BoxGeometry(0.05, 0.42, 0.44), cupG = new THREE.CylinderGeometry(0.042, 0.036, 0.06, 10, 1, true);
+  const seats = [], backs = [], arms = [], stds = [], cups = [];
   for (let k = 0; k < ROWS; k++) {
-    const y = k * RISE, z = ROW0 + k * ROWD;
-    for (let x = -12.9; x < -7.5; x += 0.46) {
-      if (rand() < 0.04) continue;   // a seat or two gone
-      const up = rand() < 0.3;   // some folded up
-      seats.push([x + 0.2, y + (up ? 0.42 : 0.3), z + (up ? 0.12 : 0), up ? 1.2 : 0]); backs.push([x + 0.2, y + 0.58, z + 0.2, -0.12 + (rand() - 0.5) * 0.06]); arms.push([x - 0.01, y + 0.45, z]);
+    const y = rh(k), z = rz(k);
+    for (const [x0, x1] of BLOCKS) {
+      const n = Math.floor((x1 - x0) / 0.52 + 1e-6), p = (x1 - x0) / n;
+      for (let i = 0; i < n; i++) { const cx = x0 + (i + 0.5) * p; if (rand() < 0.03) continue; const up = rand() < 0.3, c = new THREE.Color(0x7a1a24).offsetHSL((rand() - 0.5) * 0.02, (rand() - 0.5) * 0.12, (rand() - 0.5) * 0.05);
+        seats.push([cx, y + (up ? 0.47 : 0.3), z + (up ? -0.08 : 0.03), up ? -1.3 : 0, c]); backs.push([cx, y + 0.66, z - 0.21, -0.14 + (rand() - 0.5) * 0.06, c]); }
+      for (let i = 0; i <= n; i++) { const ax = x0 + i * p; arms.push([ax, y + 0.47, z + 0.01]); stds.push([ax, y + 0.21, z - 0.02]); cups.push([ax, y + 0.47, z + 0.21]); }
+      solid(x0, x1, rE(k + 1), z + 0.22, y, y + 0.95);
     }
-    arms.push([-7.5, y + 0.45, z]);
-    solid(-12.95, -7.45, z - 0.22, z + 0.26, y, y + 0.82);
   }
-  const inst = (geo, mat, list, rotAxis) => { const im = new THREE.InstancedMesh(geo, mat, list.length), o = new THREE.Object3D(); list.forEach((s, i) => { o.position.set(s[0], s[1], s[2]); o.rotation.set(rotAxis && s[3] ? s[3] : 0, 0, 0); o.updateMatrix(); im.setMatrixAt(i, o.matrix); }); stage.add(im); };
-  inst(seatG, MC.velvet, seats, true); inst(backG, MC.velvet, backs, true); inst(armG, MC.seatDark, arms);
-  // a light in the riser of each step of the aisle
-  const stepM = std({ color: 0x000000, emissive: 0xffb060, emissiveIntensity: 2.4 });
-  for (const [x, z] of [[-11.5, -1.5], [-8.5, -1.5], [-10, 2.5]]) { const hl = new THREE.PointLight(0xd8b088, 4.0, 13, 1.0); hl.position.set(x, HALL.c - 0.3, z); stage.add(hl); }   // the house lights, left on low
-  for (let k = 1; k < ROWS; k++) { const m = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.025, 0.01), stepM); m.position.set(-7.1, k * RISE - 0.05, ROW0 + k * ROWD - 0.505); stage.add(m); }
+  const inst = (geo, mat, list) => { const im = new THREE.InstancedMesh(geo, mat, list.length), o = new THREE.Object3D(); list.forEach((s, i) => { o.position.set(s[0], s[1], s[2]); o.rotation.set(s[3] || 0, 0, 0); o.updateMatrix(); im.setMatrixAt(i, o.matrix); if (s[4]) im.setColorAt(i, s[4]); }); if (im.instanceColor) im.instanceColor.needsUpdate = true; stage.add(im); };
+  inst(seatG, MX.seat, seats); inst(backG, MX.seat, backs); inst(armG, MC.seatDark, arms); inst(stdG, MX.plastic, stds); inst(cupG, MX.plastic, cups);
+  // the row letters, lit on the ends of the rows that meet the two inner aisles
+  const lt = canvasTex(64 * ROWS, 64, (g, w, h) => { g.fillStyle = '#120806'; g.fillRect(0, 0, w, h); g.fillStyle = '#e8b45a'; g.font = 'bold 44px "Trebuchet MS", Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; for (let k = 0; k < ROWS; k++) g.fillText(String.fromCharCode(65 + k), k * 64 + 32, 34); });
+  const lm = std({ color: 0x000000, emissive: 0xffffff, emissiveMap: lt, emissiveIntensity: 0.9 });
+  for (let k = 0; k < ROWS; k++) for (const [ax, s] of [[BLOCKS[0][1], 1], [BLOCKS[1][0], -1], [BLOCKS[1][1], 1], [BLOCKS[2][0], -1]]) {
+    const g = new THREE.PlaneGeometry(0.11, 0.11), uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setX(i, (k + uv.getX(i)) / ROWS);
+    mgeo(lm, g, ax + s * 0.028, rh(k) + 0.3, rz(k) - 0.02, 0, s > 0 ? Math.PI / 2 : -Math.PI / 2); }
 }
-// the screen, and the dust in the beam that is still coming from the projection window though nothing is showing
-const SCR = { w: 6.4, h: 2.8, y: 2.1, z: HALL.z0 + 0.12, x: -9.25 };
-const scrCv = document.createElement('canvas'); scrCv.width = 128; scrCv.height = 64; const scrG = scrCv.getContext('2d');
+// brass handrails up the middle of the two inner aisles
+for (const xc of [(AISLES[1][0] + AISLES[1][1]) / 2, (AISLES[2][0] + AISLES[2][1]) / 2]) {
+  const a = new V3(xc, rh(1) + 0.85, rz(1) + 0.4), b = new V3(xc, rh(ROWS - 1) + 0.85, rz(ROWS - 1) + 0.4), g = new THREE.CylinderGeometry(0.022, 0.022, a.distanceTo(b), 10);
+  g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new V3(0, 1, 0), b.clone().sub(a).normalize())); g.translate((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2); mpush(MC.gold, g);
+  for (let k = 1; k < ROWS; k += 2) { mgeo(MC.gold, new THREE.CylinderGeometry(0.018, 0.024, 0.85, 8), xc, rh(k) + 0.425, rz(k) + 0.4); solid(xc - 0.025, xc + 0.025, rz(k) + 0.375, rz(k) + 0.425, rh(k), rh(k) + 0.85); }
+}
+// the side walls: tall timber fins standing off the panels, sconces climbing with the rows, the surround speakers
+for (const [x, s] of [[HX0, 1], [HX1, -1]]) {
+  for (let z = -3.2; z > HZ0 + 0.5; z -= 2.4) mbox(Math.min(x, x + s * 0.2), Math.max(x, x + s * 0.2), floorAt(z) + 2.6, HALL.c - 0.4, z - 0.06, z + 0.06, MX.fin);
+  for (let k = 2; k < ROWS; k += 3) { const z = rz(k) + 0.1; sconce(x + s * 0.02, rh(k) + 2.5, z, s > 0 ? '+x' : '-x', k === 8 ? MX.lampOff : MX.lampDim); mbox(Math.min(x, x + s * 0.4), Math.max(x, x + s * 0.4), rh(k) + 4.6, rh(k) + 5.3, z - 0.24, z + 0.24, MX.black); }
+}
+// acoustic clouds hung under the ceiling, with a few small lights in them
+{ let n = 0; for (const [za, zb] of [[-3.5, -9.5], [-11, -17], [-18.5, -24.5], [-26, -30.2]]) { mbox(HX0 + 2.5, HX1 - 2.5, 16.4, 16.6, zb, za, MX.fin);
+  for (let x = HX0 + 3.6; x < HX1 - 3; x += 2.4) for (const z of [za - 1.5, zb + 1.5]) { n++; downlight(x, 16.39, z, n % 5 === 2 ? MX.lampDim : MX.lampOff, 0.09); } } }
+// the screen: 22 m by 15.4, curved toward the seats, black all round it, the side curtains drawn back
+const SCR = { w: 22, h: 15.4, y: 8.75, x: (HALL.x0 + HALL.x1) / 2, z: HZ1 - 0.25, R: 60 };
+const scrCv = document.createElement('canvas'); scrCv.width = 256; scrCv.height = 160; const scrG = scrCv.getContext('2d');
 const scrTex = new THREE.CanvasTexture(scrCv); scrTex.colorSpace = THREE.SRGBColorSpace;
-function paintScreen() { const id = scrG.createImageData(128, 64), d = id.data; const b = 150 + Math.random() * 40; for (let i = 0; i < d.length; i += 4) { const n = b + (Math.random() - 0.5) * 90; d[i] = n * 0.86; d[i + 1] = n * 0.92; d[i + 2] = n; d[i + 3] = 255; } scrG.putImageData(id, 0, 0); scrTex.needsUpdate = true; }
+function paintScreen() { const id = scrG.createImageData(256, 160), d = id.data; const b = 150 + Math.random() * 40; for (let i = 0; i < d.length; i += 4) { const n = b + (Math.random() - 0.5) * 90; d[i] = n * 0.86; d[i + 1] = n * 0.92; d[i + 2] = n; d[i + 3] = 255; } scrG.putImageData(id, 0, 0); scrTex.needsUpdate = true; }
 paintScreen();
 {
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(SCR.w, SCR.h), new THREE.MeshBasicMaterial({ map: scrTex, color: 0xc8d0dc })); m.position.set(SCR.x, SCR.y, SCR.z); stage.add(m);
-  vbox(SCR.x - SCR.w / 2 - 0.25, SCR.x + SCR.w / 2 + 0.25, SCR.y - SCR.h / 2 - 0.12, SCR.y + SCR.h / 2 + 0.12, SCR.z - 0.06, SCR.z - 0.01, std({ color: 0x050505, roughness: 1 }));   // the black masking round it
-  for (const s of [-1, 1]) vbox(SCR.x + s * (SCR.w / 2 + 0.6) - 0.3, SCR.x + s * (SCR.w / 2 + 0.6) + 0.3, 0.32, HALL.c - 0.2, HALL.z0 + 0.05, HALL.z0 + 0.3, MC.velvet);   // the curtains, drawn back
-  const beamG = new THREE.BufferGeometry(), A = [-9.3, 3.3, HALL.z1 - 0.02], hw = SCR.w / 2, hh = SCR.h / 2;
-  const C = [[SCR.x - hw, SCR.y - hh, SCR.z + 0.02], [SCR.x + hw, SCR.y - hh, SCR.z + 0.02], [SCR.x + hw, SCR.y + hh, SCR.z + 0.02], [SCR.x - hw, SCR.y + hh, SCR.z + 0.02]];
-  const pos = []; for (let i = 0; i < 4; i++) pos.push(...A, ...C[i], ...C[(i + 1) % 4]); beamG.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  stage.add(new THREE.Mesh(beamG, new THREE.MeshBasicMaterial({ color: 0x8090a8, transparent: true, opacity: 0.06, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })));
+  const ang = SCR.w / SCR.R, m = new THREE.Mesh(new THREE.CylinderGeometry(SCR.R, SCR.R, SCR.h, 64, 1, true, -ang / 2, ang), new THREE.MeshBasicMaterial({ map: scrTex, color: 0xc8d0dc, side: THREE.DoubleSide }));
+  m.position.set(SCR.x, SCR.y, SCR.z - SCR.R); stage.add(m);
+  for (const s of [-1, 1]) for (let i = 0; i < 6; i++) { const x = SCR.x + s * (SCR.w / 2 + 0.35 + i * 0.16); mbox(x - 0.09, x + 0.09, 0.9, HALL.c - 0.5, HZ1 - 0.5 - (i % 2) * 0.12, HZ1 - 0.2 - (i % 2) * 0.12, MC.velvet); }   // the curtains, in folds
+  mbox(HX0, HX1, HALL.c - 1.2, HALL.c, HZ1 - 0.9, HZ1, MX.black);   // the valance over it
+  // the projection ports in the back wall, high over the top row, and the beams still coming out of them though nothing is showing
+  const PY = rh(ROWS - 1) + 3.6, ports = [SCR.x - 1.1, SCR.x + 1.1];
+  for (const px of ports) { mbox(px - 0.45, px + 0.45, PY - 0.4, PY + 0.4, HZ0, HZ0 + 0.06, MX.black); const g = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.6), std({ color: 0x000000, emissive: 0x9fb4d8, emissiveIntensity: 0.7 })); g.position.set(px, PY, HZ0 + 0.065); stage.add(g); }
+  mbox(SCR.x - 3.2, SCR.x + 3.2, PY - 0.7, PY - 0.62, HZ0, HZ0 + 0.3, MX.steel);
+  const hw = SCR.w / 2, hh = SCR.h / 2, zc = SCR.z - 0.5, C = [[SCR.x - hw, SCR.y - hh, zc], [SCR.x + hw, SCR.y - hh, zc], [SCR.x + hw, SCR.y + hh, zc], [SCR.x - hw, SCR.y + hh, zc]];
+  const beamM = new THREE.MeshBasicMaterial({ color: 0x8090a8, transparent: true, opacity: 0.035, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  for (const px of ports) { const A = [px, PY, HZ0 + 0.1], pos = []; for (let i = 0; i < 4; i++) pos.push(...A, ...C[i], ...C[(i + 1) % 4]); const bg = new THREE.BufferGeometry(); bg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); stage.add(new THREE.Mesh(bg, beamM)); }
 }
-const scrLight = new THREE.RectAreaLight(0xb8c8e0, 2.6, SCR.w, SCR.h); scrLight.position.set(SCR.x, SCR.y, SCR.z + 0.05); scrLight.lookAt(SCR.x, SCR.y, 0); stage.add(scrLight);
-{ const t = signTex(['EXIT'], '#160304', '#ff3a2e', 256, 96); const m = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.16), std({ color: 0x000000, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 2.2 })); m.position.set(-6.9, 2.4, HALL.z1 - 0.09); m.rotation.y = Math.PI; stage.add(m);
-  const l = new THREE.PointLight(0xff2a1e, 0.35, 4, 2); l.position.set(-6.9, 2.3, HALL.z1 - 0.4); stage.add(l); }
+const SCR_I = 1.5, scrLight = new THREE.RectAreaLight(0xb8c8e0, SCR_I, SCR.w, SCR.h); scrLight.position.set(SCR.x, SCR.y, SCR.z - 0.6); scrLight.lookAt(SCR.x, SCR.y, -100); stage.add(scrLight);
+for (const z of [-7, -17, -27]) { const hl = new THREE.PointLight(0xd8b088, 15.0, 36, 1.0); hl.position.set(SCR.x, 15.6, z); stage.add(hl); }   // the house lights, left on low
+// the doors: the one from the corridor, both leaves standing open into the hall; an emergency exit across the front; one at the top
+for (const z of HDOOR) { mbox(HX1 - 1.18, HX1 - 0.02, 0, 2.86, z - 0.025, z + 0.025, MX.doorGrey, true); mbox(HX1 - 1.0, HX1 - 0.2, 1.0, 1.05, z - (z === HDOOR[0] ? -0.06 : 0.06), z - (z === HDOOR[0] ? -0.03 : 0.03), MX.steel); }
+mbox(HX1 - 0.02, HX1 + 0.01, 2.86, 2.96, HDOOR[0] - 0.08, HDOOR[1] + 0.08, MX.steel);
+exitSign(HX1 - 0.02, 3.15, (HDOOR[0] + HDOOR[1]) / 2, -Math.PI / 2);
+{ const l = new THREE.PointLight(0xff2a1e, 0.6, 5, 2); l.position.set(HX1 - 0.4, 3.0, (HDOOR[0] + HDOOR[1]) / 2); stage.add(l); }
+mbox(HX0, HX0 + 0.04, 0, 2.6, HDOOR[0] + 0.05, HDOOR[1] - 0.05, MX.doorGrey); mbox(HX0 + 0.04, HX0 + 0.05, 0, 2.6, -5.215, -5.185, MX.black); mbox(HX0 + 0.04, HX0 + 0.09, 1.0, 1.06, HDOOR[0] + 0.25, HDOOR[1] - 0.25, MX.steel);
+exitSign(HX0 + 0.02, 2.85, (HDOOR[0] + HDOOR[1]) / 2, Math.PI / 2);
+{ const y = rh(ROWS - 1), x0 = HX0 + 0.5, x1 = HX0 + 1.9; mbox(x0, x1, y, y + 2.5, HZ0, HZ0 + 0.04, MX.doorGrey); mbox(x0 + 0.2, x1 - 0.2, y + 1.0, y + 1.06, HZ0 + 0.04, HZ0 + 0.09, MX.steel); exitSign((x0 + x1) / 2, y + 2.75, HZ0 + 0.02, 0); }
+flushMerged();
 
 /* ---- the two vents, each with its grille and its ladder ---- */
 // grille: slats you can see light through, hinged on one edge; ladder: an iron ladder that drops out of the opening to the floor below
@@ -710,7 +913,7 @@ setScale(scaleK);
 const player = { pos: new V3(), vel: new V3(), yaw: 0, pitch: 0, h: H_STAND, crouch: false, onGround: false, ground: 0, bob: 0, camY: 0, mode: 'walk', lad: null };
 const keys = Object.create(null);
 let cDownAt = 0, cToggledOn = false;
-const ceilAt = (x, z, y = 0) => (inDuctY(y) ? DUCT_Y + DUCT_H - 0.02 : x < -0.3 ? cinemaCeil(x, z) - 0.05 : (z < 0 ? TUBE_H : CEIL) - 0.05);   // the shop, the corridor, the cinema's rooms, or (up there) the duct
+const ceilAt = (x, z, y = 0) => (inDuctY(y, x, z) ? DUCT_Y + DUCT_H - 0.02 : x < -0.3 ? cinemaCeil(x, z) - 0.05 : (z < 0 ? TUBE_H : CEIL) - 0.05);   // the shop, the corridor, the cinema's rooms, or (up there) the duct
 function groundAt(x, z, y, reach) { let g = 0; for (const s of solids) if (x >= s.x0 && x <= s.x1 && z >= s.z0 && z <= s.z1 && s.y1 <= y + reach && s.y1 > g) g = s.y1; return g; }
 function collide() {
   const p = player.pos, v = player.vel;
@@ -755,7 +958,7 @@ function placeCamera(dt) {
 // player.mode: 'walk' or 'ladder' (on H.ladder, H = player.lad). At the top of a ladder W takes you into the duct, if you fit.
 // In the duct, step onto an open vent's opening and you are on the top of its ladder, facing it.
 let ladLock = false, narrowSaid = -9;
-const inDuctY = (y) => y > CEIL - 0.25;
+const inDuctY = (y, x = player.pos.x, z = player.pos.z) => y > CEIL - 0.25 && inR(DUCT_BB, x, z);   // up in the duct (the hall's upper rows are higher, but nowhere near it)
 const ladSpot = (H) => [H.x + H.n[0] * 0.12, H.z + H.n[1] * 0.12];
 const ladTop = (H) => H.ceilY - player.h + 0.04;
 function mountLadder(H, y) {
@@ -909,7 +1112,7 @@ const markVisited = (id) => { const s = window.SCF_SAVE; if (!s) return; const v
 window.__storeStart = (st) => {
   if (on || !ready) return false; on = true; markVisited('store');
   for (const k in keys) keys[k] = false; for (const c of (st && st.held) || []) keys[c] = true;
-  fromPort(st || { d: 1.4 }); syncPickups(); last = -1; since = 0; resize();
+  fromPort(st || { d: 1.4 }); syncPickups(); stage.fog.density = 0.13; last = -1; since = 0; resize();
   canvas.style.display = 'block'; grade.uniforms.uFade.value = 1; initAudio();
   requestAnimationFrame(frame); return true;
 };
@@ -921,7 +1124,7 @@ function tick(dt) {
   if (keys.ArrowLeft) player.yaw += 1.8 * dt; if (keys.ArrowRight) player.yaw -= 1.8 * dt;
   if (keys.ArrowUp) player.pitch = Math.min(1.5, player.pitch + 1.3 * dt); if (keys.ArrowDown) player.pitch = Math.max(-1.5, player.pitch - 1.3 * dt);
   updatePlayer(dt);
-  const d = (player.pos.z - PORT.hz) * PORT.dz, inTube = player.pos.z < 0 && Math.abs(player.pos.x - DOOR_X) < TUBE_HW + 0.3;   // how far past the corridor's hand-over point (the cinema's screen also lies at z < 0, far to the west)
+  const d = (player.pos.z - PORT.hz) * PORT.dz, inTube = player.pos.z < 0 && Math.abs(player.pos.x - DOOR_X) < TUBE_HW + 0.3;   // how far past the corridor's hand-over point (the cinema's corridor and hall also lie at z < 0, far to the west)
   if (inTube && d < -0.6) { leave(); if (!on) return -1; return (player.pos.z - PORT.hz) * PORT.dz; }
   return inTube ? d : 99;
 }
@@ -948,7 +1151,9 @@ function frame(now) {
   }
   if (now >= boLamp.next) { const r = Math.random(); boLamp.f = r < 0.25 ? 0.1 + Math.random() * 0.3 : 0.75 + Math.random() * 0.3; boLamp.next = now + (boLamp.f < 0.5 ? 40 + Math.random() * 120 : 300 + Math.random() * 2200); }
   boLamp.l.intensity = 3.6 * boLamp.f; boLamp.bulb.material.emissiveIntensity = 2 * boLamp.f;
-  if (player.pos.x < -0.3 && (frame.scrT = (frame.scrT || 0) + dt) > 0.08) { frame.scrT = 0; paintScreen(); scrLight.intensity = 2.2 + Math.random() * 0.8; }
+  if (player.pos.x < -0.3 && (frame.scrT = (frame.scrT || 0) + dt) > 0.08) { frame.scrT = 0; paintScreen(); scrLight.intensity = SCR_I * (0.85 + Math.random() * 0.3); }
+  { const p = player.pos, big = inR(HALL, p.x, p.z) || (inR(CORR, p.x, p.z) && p.z < HALL.z1), fd = big ? 0.016 : p.x < -0.3 && !inDuctY(p.y) ? 0.06 : 0.13;   // the haze: thick in the shop, thinner in the cinema, thin in the big hall
+    stage.fog.density += (fd - stage.fog.density) * Math.min(1, dt * 1.5); }
   const P = aimed(), Hv = P ? null : hatchAimed();
   if (window.Equip) {
     if (P) { _p.copy(P.at).project(camera); window.Equip.prompt((_p.x * 0.5 + 0.5) * innerWidth, (-_p.y * 0.5 + 0.5) * innerHeight); }
