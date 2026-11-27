@@ -4,7 +4,8 @@
 // lettering (the same strokes, ttlBuild in js/hub.js), and three choices:
 //   New Game   a new save slot (the existing ones are kept), starting in the playroom
 //   Continue   the save played last, where it was left
-//   Load Game  every save, to pick one (or delete one: it asks again first)
+//   Load Game  every save, to pick one (or delete one: it asks again first); and Import / Export / Export all, which read saves in from
+//              a .json file (added as new saves, nothing here is replaced) and write the chosen save, or all of them, out to one
 // Saves: js/save.js. On this page the engine's own writes are switched off, so opening the menu never makes or changes a save.
 'use strict';
 function enterMenu(){
@@ -59,6 +60,8 @@ const MENU={
     <div class="body" id="mlist" hidden>
       <div class="list"><table><thead><tr><th>Save</th><th>Where</th><th>Moons</th><th>Last played</th></tr></thead><tbody id="mrows"></tbody></table><div class="empty" id="mempty" hidden>No saves yet. 还没有存档。</div></div>
       <div class="row2" id="mrow"><button class="xp" id="mBack">Back <small>返回</small></button><button class="xp del" id="mDel" disabled>Delete <small>删除</small></button><button class="xp" id="mGo" disabled>Load <small>读取</small></button></div>
+      <div class="row2" id="mrowio"><button class="xp" id="mImp">Import <small>导入</small></button><button class="xp" id="mExp" disabled>Export <small>导出</small></button><button class="xp" id="mExpAll" disabled>Export all <small>全部导出</small></button></div>
+      <div class="info" id="mlinfo"></div><input type="file" id="mfile" accept=".json,application/json" hidden>
       <div class="conf" id="mconf" hidden></div>
       <div class="row2" id="mrowc" hidden><button class="xp" id="mNo">Cancel <small>取消</small></button><button class="xp del hot" id="mYes">Delete <small>确认删除</small></button></div>
     </div>
@@ -72,16 +75,16 @@ const MENU={
     const blip=(f,d)=>{try{if(!Snd.ctx)Snd.init();const ac=Snd.ctx;if(!ac)return;if(ac.state==='suspended')ac.resume();const t=ac.currentTime,o=ac.createOscillator(),g=ac.createGain();o.type='square';o.frequency.value=f;g.gain.setValueAtTime(0.03,t);g.gain.exponentialRampToValueAtTime(0.0001,t+d);o.connect(g);g.connect(ac.destination);o.start(t);o.stop(t+d+0.02);}catch(e){}};
     const go=(slot)=>{if(leaving)return;leaving=true;S.select(slot.id);blip(220,0.25);$m('menu').classList.add('out');
       document.body.style.transition='opacity .7s';document.body.style.opacity='0';setTimeout(()=>{location.href=S.pageFor(slot);},720);};
-    const refreshMain=()=>{const last=S.latest(),n=S.slots().length;$m('mCont').disabled=!last;$m('mLoad').disabled=!n;
+    const refreshMain=()=>{const last=S.latest();$m('mCont').disabled=!last;   // Load Game stays open with no saves: it is where one is imported
       $m('minfo').textContent=last?'Last played: Save '+last.id+' — '+WHERE(last.data)+', '+when(last.updated):'No saves yet. 还没有存档。';};
     const buttons=()=>[...document.querySelectorAll('#menu .body:not([hidden]) button.xp')].filter((b)=>!b.disabled);
     const focusAt=(i)=>{const b=buttons();if(b.length)b[(i+b.length)%b.length].focus();};
     const showList=(on)=>{$m('mmain').hidden=on;$m('mlist').hidden=!on;$m('mwt').textContent=on?'C:\\SCF\\saves\\':'C:\\SCF\\start.exe';
       if(!on){refreshMain();focusAt(0);return;}
-      ask(false);const rows=$m('mrows'),list=S.slots();rows.innerHTML='';pick=null;$m('mGo').disabled=true;$m('mDel').disabled=true;$m('mempty').hidden=list.length>0;
+      ask(false);note('');const rows=$m('mrows'),list=S.slots();rows.innerHTML='';pick=null;$m('mGo').disabled=true;$m('mDel').disabled=true;$m('mExp').disabled=true;$m('mExpAll').disabled=!list.length;$m('mempty').hidden=list.length>0;
       for(const s of list){const tr=document.createElement('tr');tr.className='row';
         tr.innerHTML='<td>Save '+s.id+(s.id===S.currentId()?' ●':'')+'</td><td>'+WHERE(s.data)+(s.data.gun?' · size gun':'')+'</td><td>'+(s.data.moons||0)+'</td><td>'+when(s.updated)+'</td>';
-        tr.onclick=()=>{if(asking)return;for(const r of rows.children)r.classList.remove('sel');tr.classList.add('sel');pick=s;$m('mGo').disabled=false;$m('mDel').disabled=false;blip(660,0.04);};
+        tr.onclick=()=>{if(asking)return;for(const r of rows.children)r.classList.remove('sel');tr.classList.add('sel');pick=s;$m('mGo').disabled=false;$m('mDel').disabled=false;$m('mExp').disabled=false;blip(660,0.04);};
         tr.ondblclick=()=>go(s);rows.appendChild(tr);}
       if(rows.firstChild)rows.firstChild.onclick();};
     $m('mNew').onclick=()=>go(S.newGame());
@@ -90,11 +93,28 @@ const MENU={
     $m('mBack').onclick=()=>showList(false);
     $m('mGo').onclick=()=>{if(pick)go(pick);};
     // Delete: ask again, in the window itself, before anything is gone
-    function ask(on){asking=on&&!!pick;$m('mrow').hidden=asking;$m('mconf').hidden=!asking;$m('mrowc').hidden=!asking;
+    function ask(on){asking=on&&!!pick;$m('mrow').hidden=asking;$m('mrowio').hidden=asking;$m('mlinfo').hidden=asking;$m('mconf').hidden=!asking;$m('mrowc').hidden=!asking;
       if(asking){$m('mconf').innerHTML='Delete <b>Save '+pick.id+'</b> &mdash; '+WHERE(pick.data)+', '+when(pick.updated)+'?<br>This cannot be undone. 删除后无法恢复。';$m('mNo').focus();blip(330,0.12);}}
     $m('mDel').onclick=()=>{if(pick)ask(true);};
     $m('mNo').onclick=()=>{ask(false);$m('mDel').focus();};
-    $m('mYes').onclick=()=>{if(!pick)return;const id=pick.id;S.remove(id);blip(140,0.3);showList(true);if(!S.slots().length)showList(false);};
+    $m('mYes').onclick=()=>{if(!pick)return;const id=pick.id;S.remove(id);blip(140,0.3);showList(true);note('Save '+id+' deleted. 已删除。');};
+    // Export: the chosen save, or all of them, written out as a .json file (a download). Import: a file like that read back in;
+    // every save in it is added as a new one, and nothing already here is touched.
+    const note=(t)=>{$m('mlinfo').textContent=t;};
+    const stamp=()=>{const d=new Date(),p=(n)=>String(n).padStart(2,'0');return d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'-'+p(d.getHours())+p(d.getMinutes());};
+    const saveOut=(id)=>{const o=S.exportSlots(id);if(!o.slots.length)return;const name='scf-'+(id==null?'saves':'save-'+id)+'-'+stamp()+'.json';
+      const url=URL.createObjectURL(new Blob([JSON.stringify(o,null,1)],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);
+      blip(520,0.1);note((id==null?o.slots.length+' save'+(o.slots.length>1?'s':''):'Save '+id)+' exported to '+name+'. 已导出。');};
+    $m('mExp').onclick=()=>{if(pick)saveOut(pick.id);};
+    $m('mExpAll').onclick=()=>saveOut(null);
+    $m('mImp').onclick=()=>{$m('mfile').value='';$m('mfile').click();};
+    $m('mfile').onchange=()=>{const f=$m('mfile').files[0];if(!f)return;
+      if(f.size>2e6){blip(140,0.3);note('That file is too big to be a save. 文件过大，不是存档。');return;}
+      const rd=new FileReader();rd.onerror=()=>{blip(140,0.3);note('Could not read that file. 无法读取该文件。');};
+      rd.onload=()=>{let made=null;try{made=S.importSlots(JSON.parse(String(rd.result)));}catch(e){made=null;}
+        if(!made||!made.length){blip(140,0.3);note('Not a save file. 这不是存档文件，没有导入任何内容。');return;}
+        showList(true);blip(520,0.1);note(made.length+' save'+(made.length>1?'s':'')+' imported as Save '+made.map((s)=>s.id).join(', ')+'. 已导入为新存档。');};
+      rd.readAsText(f);};
     document.addEventListener('focusin',(e)=>{for(const b of document.querySelectorAll('#menu button.xp'))b.classList.toggle('sel',b===e.target);});
     window.addEventListener('keydown',(e)=>{
       if(leaving)return;const onList=!$m('mlist').hidden;
