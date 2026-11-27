@@ -566,6 +566,7 @@ function makeRefl() {
   floorMat.uniforms.uRefl.value = refl.texture; floorMat.uniforms.uPx.value.set(1 / w, 1 / h);
 }
 makeRefl();
+let dustK = 0;   // how much of the dust in the air shows: none on foot, all of it at speed in the car
 function renderMirror() {
   mirrorCam.copy(camera);
   mirrorCam.position.set(camera.position.x, -camera.position.y, camera.position.z);
@@ -576,7 +577,7 @@ function renderMirror() {
   uMirrorVP.value.multiplyMatrices(mirrorCam.projectionMatrix, mirrorCam.matrixWorldInverse);
   floor.visible = false; dust.p.visible = false;
   renderer.setRenderTarget(refl); renderer.clear(); renderer.render(scene, mirrorCam); renderer.setRenderTarget(null);
-  floor.visible = true; dust.p.visible = true;
+  floor.visible = true; dust.p.visible = dustK > 0.01;
 }
 
 /* ---------------- post ---------------- */
@@ -1252,7 +1253,8 @@ function frame(now) {
   if (!(window.SCF_G && window.SCF_G.isOpen())) { if (CAR.on) drive(dt); else step(dt); }
   carFrame(dt); megaFrame(uTime.value);
   placeCamera(uTime.value); uCam.value.copy(camera.position);
-  // dust: kept round you, drifting
+  // dust: kept round you, drifting; only seen while the car is moving (it comes in with the speed), never when you stand or walk
+  dustK += ((CAR.on ? clamp(Math.abs(CAR.v) / 30, 0, 1) : 0) - dustK) * Math.min(1, dt * 3); dust.p.material.opacity = 0.55 * dustK; dust.p.visible = dustK > 0.01;
   { const a = dust.a, c = camera.position, t = uTime.value;
     for (let i = 0; i < dust.N; i++) { const o = i * 3; a[o] += Math.sin(t * 0.2 + i) * 0.0015; a[o + 1] += 0.001 * Math.cos(t * 0.13 + i * 1.7); for (let k = 0; k < 3; k++) { const ck = k === 0 ? c.x : k === 1 ? c.y : c.z, rel = a[o + k] - ck; if (rel > 12 || rel < -12) a[o + k] = ck + (((rel + 12) % 24) + 24) % 24 - 12; } }
     dust.p.geometry.attributes.position.needsUpdate = true; }
