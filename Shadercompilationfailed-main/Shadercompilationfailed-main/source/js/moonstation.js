@@ -474,7 +474,10 @@ const sky = new THREE.Mesh(new THREE.SphereGeometry(30000, 64, 32), new THREE.Sh
       vec3 sea = mix(vec3(0.004, 0.028, 0.085), vec3(0.02, 0.13, 0.19), shelf);
       vec3 surf = mix(sea, lc, land);
       // the clouds: big swirling systems, streets of small ones, thin veils, and where they are thick a bluer grey underneath
-      vec3 cw = Nw + (vec3(fbm(Nw * 10.0 + 4.0), fbm(Nw * 10.0 + 9.0), fbm(Nw * 10.0 + 2.0)) - 0.5) * 0.06;
+      // (the whole of the weather is carried slowly over the ground, the same clouds, turning about an axis chosen so that from the station they go up and to the left)
+      vec3 ax = vec3(0.845, 0.300, -0.443); float ca = cos(uTime * 0.0012), sa = sin(uTime * 0.0012);
+      vec3 Nc = Nw * ca + cross(ax, Nw) * sa + ax * dot(ax, Nw) * (1.0 - ca);
+      vec3 cw = Nc + (vec3(fbm(Nc * 10.0 + 4.0), fbm(Nc * 10.0 + 9.0), fbm(Nc * 10.0 + 2.0)) - 0.5) * 0.06;
       float c1 = fbm8(cw * vec3(7.0, 12.0, 7.0) + vec3(0.0, 0.0, uTime * 0.0006)), c2 = fbm8(cw * 34.0 + 3.0);
       float cl = smoothstep(0.42, 0.68, c1 * 0.75 + c2 * 0.35 - 0.05), veil = smoothstep(0.40, 0.58, c1) * 0.3;
       cl = max(cl, veil);
