@@ -506,18 +506,41 @@ const sky = new THREE.Mesh(new THREE.SphereGeometry(30000, 64, 32), new THREE.Sh
         float r = length(rd * t - C), Rr = 9300.0;
         float d = r - Rr;
         float line = exp(-abs(d) / 9.0) * 3.2 + exp(-abs(d) / 120.0) * 0.35;
-        col = mix(col, vec3(0.055, 0.058, 0.064) * (0.4 + 0.6 * max(dot(Nr, S), 0.0)), step(0.0, d) * step(d, 520.0) * 0.92);
-        col += vec3(1.0, 0.36, 0.10) * line;
-        // now and then a small golden pulse goes round on the face of the band (not along its lit edge): a thin short streak, each on
-        // a track of its own, a bright head and a little light trailing behind it; never thinner than a pixel, fainter instead
+        // the band's face is built, not blank: concentric tracks with dark gaps between them, each track laid in plates of its own
+        // shade, finer plates inside those, a few lamps; whatever is too small for a pixel from here is left out, so it reads as far off
         vec3 e1 = normalize(cross(Nr, vec3(0.0, 1.0, 0.0))), e2 = cross(Nr, e1), vv = rd * t - C;
-        float th = atan(dot(vv, e2), dot(vv, e1)), wd = clamp(fwidth(d) * 0.9, 3.0, 40.0), thin = sqrt(3.0 / wd);
-        for (int k = 0; k < 9; k++){
-          float fk = float(k), sp = (0.20 + 0.20 * fract(fk * 0.618)) * (mod(fk, 3.0) < 1.0 ? -1.0 : 1.0);
-          float dl = (mod(th - fk * 2.4 - uTime * sp + 3.14159, 6.28318) - 3.14159) * sign(sp);   // where this point is from the head, the way it is going (negative: behind it)
-          float across = exp(-abs(d - (70.0 + 390.0 * fract(fk * 0.37 + 0.2))) / wd) * thin;
-          float along = dl < 0.0 ? exp(dl / 0.020) : exp(-dl / 0.0012);
-          col += vec3(1.0, 0.70, 0.26) * across * along * (1.3 + 2.6 * exp(-abs(dl) / 0.0025));
+        float th = atan(dot(vv, e2), dot(vv, e1)), wd = clamp(fwidth(d) * 0.9, 3.0, 40.0), wa = fwidth(th), thin = sqrt(3.0 / wd);
+        float tex = 1.0, lamp = 0.0;
+        {
+          float k1 = 1.0 - smoothstep(0.12, 0.45, wd / 130.0), k2 = 1.0 - smoothstep(0.12, 0.45, wd / 32.5), k3 = 1.0 - smoothstep(0.12, 0.45, wd / 8.0);
+          float i1 = floor(d / 130.0), i2 = floor(d / 32.5), i3 = floor(d / 8.0), f1 = fract(d / 130.0) * 130.0, f2 = fract(d / 32.5) * 32.5;
+          tex *= 1.0 + (hash3(vec3(i1, 1.0, 4.0)) - 0.5) * 0.55 * k1; tex *= 1.0 + (hash3(vec3(i2, 2.0, 4.0)) - 0.5) * 0.40 * k2; tex *= 1.0 + (hash3(vec3(i3, 3.0, 4.0)) - 0.5) * 0.30 * k3;
+          float g1 = max(7.0, wd), g2 = max(1.6, wd);
+          tex *= 1.0 - 0.75 * k1 * min(1.0, 7.0 / g1) * (1.0 - smoothstep(g1 * 0.5, g1, min(f1, 130.0 - f1)));          // the gaps between the great tracks
+          tex *= 1.0 - 0.50 * k2 * min(1.0, 1.6 / g2) * (1.0 - smoothstep(g2 * 0.5, g2, min(f2, 32.5 - f2)));
+          // plates along each track: long ones, and short ones inside them (each track's joints fall in a different place)
+          float A1 = 0.021, A2 = 0.0042, a1 = th / A1 + hash3(vec3(i1, 5.0, 1.0)) * 7.0, a2 = th / A2 + hash3(vec3(i2, 6.0, 1.0)) * 7.0;
+          float q1 = (1.0 - smoothstep(0.12, 0.45, wa / A1)) * k1, q2 = (1.0 - smoothstep(0.12, 0.45, wa / A2)) * k2;
+          tex *= 1.0 + (hash3(vec3(floor(a1), i1, 7.0)) - 0.5) * 0.60 * q1; tex *= 1.0 + (hash3(vec3(floor(a2), i2, 8.0)) - 0.5) * 0.45 * q2;
+          float s1 = max(0.03, wa / A1), s2 = max(0.05, wa / A2);
+          tex *= 1.0 - 0.6 * q1 * min(1.0, 0.03 / s1) * (1.0 - smoothstep(s1 * 0.5, s1, min(fract(a1), 1.0 - fract(a1))));
+          tex *= 1.0 - 0.4 * q2 * min(1.0, 0.05 / s2) * (1.0 - smoothstep(s2 * 0.5, s2, min(fract(a2), 1.0 - fract(a2))));
+          float lh = hash3(vec3(floor(a2), i2, 9.0)); lamp = step(0.965, lh) * q2 * smoothstep(0.22, 0.08, abs(fract(a2) - 0.5)) * smoothstep(0.22, 0.08, abs(f2 / 32.5 - 0.5));
+        }
+        float inband = step(0.0, d) * step(d, 520.0);
+        col = mix(col, vec3(0.055, 0.058, 0.064) * tex * (0.4 + 0.6 * max(dot(Nr, S), 0.0)), inband * 0.92);
+        col += mix(vec3(1.0, 0.75, 0.45), vec3(0.6, 0.8, 1.0), step(0.5, fract(hash3(vec3(floor(th / 0.0042), 3.0, 2.0))))) * lamp * 0.4 * inband;
+        col += vec3(1.0, 0.36, 0.10) * line;
+        // It is a machine, and it is running: golden pulses go round it on rails (the gaps between the great tracks), all the same way,
+        // evenly spaced on each rail like the teeth of something turning, each rail at its own steady speed; a bright head, a long tail,
+        // and the rail itself glowing faintly ahead of and behind them. Never thinner than a pixel; fainter instead.
+        for (int k = 0; k < 3; k++){
+          float fk = float(k), rail = 130.0 * (fk + 1.0), n = 7.0 + fk * 4.0, per = 6.28318 / n, sp = 0.62 + 0.21 * fk;
+          float across = exp(-abs(d - rail) / wd) * thin;
+          float dl = mod((th * 1.0) - uTime * sp + fk * 1.7, per); dl = dl > per * 0.12 ? dl - per : dl;      // from the nearest head: negative behind it
+          float along = dl < 0.0 ? exp(dl / 0.085) : exp(-dl / 0.0012);
+          float dl2 = dl + 0.03, twin = (dl2 < 0.0 ? exp(dl2 / 0.03) : exp(-dl2 / 0.0012)) * step(1.5, fk + 0.6);    // on the outer rails they come in pairs
+          col += vec3(1.0, 0.70, 0.26) * across * (along * (1.2 + 2.8 * exp(-abs(dl) / 0.0025)) + twin * 1.1 + 0.035);
         }
       }
     }
