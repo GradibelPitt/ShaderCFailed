@@ -167,7 +167,11 @@ void main(){
   // the cliff: bare dark rock. Nothing here is soft: it is broken into blocks, the blocks into smaller blocks and those again, each one
   // tilted its own way with a crack round it; it lies in beds, some of them standing out as ledges; it is worn into flutes running down it;
   // and what is too small for a pixel from where you stand is left out, so twelve kilometres off it is still sharp, and so it is at arm's length
+#ifdef CAPX
+  vec2 u = vW.xy;                                                   // the rock's broken-off end faces -z: its pattern runs across x
+#else
   vec2 u = vW.zy;
+#endif
   float px = length(fwidth(vW)) * 0.7 + 1e-4;                       // metres to a pixel, here
   float face = n.x > 0.0 ? 1.0 : -1.0;                              // the hall's side of it, or the outside
   rG = vec2(0.0); rTone = 0.0; rDark = 0.0; rShd = 0.0;
@@ -200,7 +204,11 @@ void main(){
   // the hollows of the cliff's own shape sit in shade, its ridges stand a little clear
   float cv = vAO * face, occ = 1.0 - 0.50 * smoothstep(0.0, 0.9, -cv) + 0.14 * smoothstep(0.0, 0.9, cv);
   g /= 1.0 + 0.4 * length(g);
+#ifdef CAPX
+  vec3 ez = normalize(vec3(1.0, 0.0, 0.0) - n * n.x + 1e-4), ey = normalize(vec3(0.0, 1.0, 0.0) - n * n.y + 1e-4);
+#else
   vec3 ez = normalize(vec3(0.0, 0.0, 1.0) - n * n.z + 1e-4), ey = normalize(vec3(0.0, 1.0, 0.0) - n * n.y + 1e-4);
+#endif
   vec3 nb = normalize(n + ez * g.x + ey * g.y);
   vec3 alb = mix(vec3(0.022, 0.021, 0.020), vec3(0.098, 0.092, 0.083), clamp(0.52 + tone, 0.0, 1.0));
   alb = mix(alb, vec3(0.105, 0.102, 0.098), smoothstep(0.30, 0.85, nb.y) * 0.55);      // dust lying where it can
@@ -304,6 +312,33 @@ const CZ1 = ZE - 1700;   // the rock runs on past the end of the floor, out into
   g.computeVertexNormals();
   add(g, new THREE.ShaderMaterial({ uniforms: { uCam, uTime, uMirrorVP, uBase: { value: new V3() } }, defines: { KIND: 2 }, side: THREE.DoubleSide, fragmentShader: FRAG,
     vertexShader: VERT.replace('uniform mat4 uMirrorVP;', 'uniform mat4 uMirrorVP; attribute float aAO; varying float vAO;').replace('void main(){', 'void main(){ vAO = aAO;') }));
+}
+
+// The part of the cliff that sticks out past the end of the hall is seen from outside too (from the platform), so there it is not a sheet:
+// it has a back, 0.9 to 1.6 km behind its face, and its broken-off end closes the gap between the two. Nowhere else is changed.
+{
+  const NY = 200, Hh = 13600, y0 = -300, Z0b = CZ1, Z1b = ZE + 400, NZ = 46, NS = 14;
+  const front = (y, z) => { let x = XL + cliffOut(y, z); if (z < ZE + 300) x -= Math.pow((ZE + 300 - z) / 1400, 2) * 900 * (0.6 + 0.4 * rfbm(y / 900, z / 900)); return x; };
+  const thick = (y, z) => 900 + 700 * rfbm(z / 1500 + 9.1, y / 1500 + 2.3);
+  const mesh = (pos, idx, cap) => {
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx);
+    g.setAttribute('aAO', new THREE.BufferAttribute(new Float32Array(pos.length / 3), 1)); g.computeVertexNormals();
+    add(g, new THREE.ShaderMaterial({ uniforms: { uCam, uTime, uMirrorVP, uBase: { value: new V3() } }, defines: cap ? { KIND: 2, CAPX: 1 } : { KIND: 2 }, side: THREE.DoubleSide, fragmentShader: FRAG,
+      vertexShader: VERT.replace('uniform mat4 uMirrorVP;', 'uniform mat4 uMirrorVP; attribute float aAO; varying float vAO;').replace('void main(){', 'void main(){ vAO = aAO;') }));
+  };
+  const grid = (C, R, at, cut) => { const pos = [], idx = [];
+    for (let j = 0; j <= R; j++) for (let i = 0; i <= C; i++) pos.push(...at(i / C, j / R));
+    for (let j = 0; j < R; j++) for (let i = 0; i < C; i++) { const a = j * (C + 1) + i, b = a + 1, c = a + C + 1, d = c + 1;
+      if (cut && cut(pos, [a, b, c, d])) continue; idx.push(a, c, b, b, c, d); }
+    return [pos, idx]; };
+  // the back: the face pushed in by the rock's thickness (with a slot at its foot where the platform runs under, like the face)
+  const back = grid(NZ, NY, (u, v) => { const z = Z0b + (Z1b - Z0b) * u, y = y0 + Hh * v; return [front(y, z) - thick(y, z), y, z]; },
+    (pos, q) => q.every((k) => pos[k * 3 + 1] < 112 && pos[k * 3 + 2] > PZ1 - 70 && pos[k * 3 + 2] < ZE + 70));
+  mesh(back[0], back[1], false);
+  // the end: from the face's last edge to the back's, bulging out a little, ragged, as broken rock does
+  const end = grid(NS, NY, (s, v) => { const y = y0 + Hh * v, xf = front(y, CZ1), xb = xf - thick(y, CZ1);
+    const b = Math.sin(Math.PI * s) * (120 + 260 * rfbm(y / 700 + 4.2, s * 3.0 + 1.7)); return [xf + (xb - xf) * s, y, CZ1 - b]; });
+  mesh(end[0], end[1], true);
 }
 
 /* ---------------- floor, walls ---------------- */
@@ -949,7 +984,7 @@ const megas = [];
     // the gold rings of light at its waist
     for (const [rr, t] of [[430, 9], [560, 6], [700, 11]]) { const tg = new THREE.TorusGeometry(rr, t, 6, 96); tg.deleteAttribute('uv'); tg.rotateX(Math.PI / 2); tg.translate(0, 250, 0); glow.push(tg); }
     for (let k = 0; k < 48; k++) { const a = k / 48 * Math.PI * 2; if (k % 3 === 0) continue; const m = new M4().makeRotationY(-a); B(glow, 630, 250, 0, 90, 6, 18, m); }
-    megas.push({ g: finish(hull, dark, glow, [-11000, 42000, -28000], 2.3, [0.12, 0.6, 0.05]), spin: 0.0012, bob: 400 });
+    megas.push({ g: finish(hull, dark, glow, [-11000, 42000, -28000], 2.3, [0.12, 0.6, 0.05]), spin: 0.035, bob: 400 });   // spin: radians a second about its own axis (about three minutes a turn)
   }
   // 2: a spine with two great wheels
   {
@@ -962,7 +997,7 @@ const megas = [];
       for (let k = 0; k < 4; k++) { const m = new M4().makeRotationY(-k * Math.PI / 2); B(dark, RR / 2, wy, 0, RR, 30, 30, m); }
       const tg = new THREE.TorusGeometry(260, 6, 6, 64); tg.deleteAttribute('uv'); tg.rotateX(Math.PI / 2); tg.translate(0, wy, 0); glow.push(tg);
     }
-    megas.push({ g: finish(hull, dark, glow, [2000, 50000, -36000], 1.9, [0.35, 0.2, -0.25]), spin: -0.002, bob: 300 });
+    megas.push({ g: finish(hull, dark, glow, [2000, 50000, -36000], 1.9, [0.35, 0.2, -0.25]), spin: -0.05, bob: 300 });
   }
   // 3: a long hauler, lying across
   {
@@ -984,12 +1019,13 @@ const megas = [];
     megas.push({ ship: g, R: 3600 + r() * 2600, ph: r() * 6.28, sp: 0.01 + r() * 0.02, yy: (r() - 0.5) * 3000 });
   }
 }
+const _spinQ = new THREE.Quaternion(), _spinAx = new THREE.Vector3(0, 1, 0);
 function megaFrame(t) {
   const c = megas[0].g.position;
   for (const m of megas) {
     if (m.ship) { const a = m.ph + t * m.sp, x = c.x + Math.cos(a) * m.R * 1.4, z = c.z + Math.sin(a) * m.R * 1.4; m.ship.position.set(x, c.y + m.yy + Math.sin(a * 2) * 300, z); m.ship.rotation.y = -a - Math.PI / 2; continue; }
-    if (m.base === undefined) m.base = m.g.position.clone();
-    m.g.rotation.y += m.spin * 0.016;
+    if (m.base === undefined) { m.base = m.g.position.clone(); m.q0 = m.g.quaternion.clone(); }
+    if (m.spin) m.g.quaternion.copy(m.q0).multiply(_spinQ.setFromAxisAngle(_spinAx, t * m.spin));   // turning slowly about its own (tilted) axis
     m.g.position.set(m.base.x + (m.drift ? Math.sin(t * 0.003) * m.drift * 40 : 0), m.base.y + Math.sin(t * 0.05 + m.base.x) * m.bob * 0.1, m.base.z);
   }
 }
@@ -1153,20 +1189,27 @@ function carFrame(dt) {
   CAR.hintT = Math.max(0, CAR.hintT - dt);
   if (CAR.on) { carUI.textContent = CAR.hintT > 0 ? 'W  GO  ·  S  BRAKE  ·  A D  STEER  ·  E  GET OUT' : (Math.abs(CAR.v) < 4 && CAR.hintT === 0 ? '' : ''); carUI.style.opacity = CAR.hintT > 0 ? '1' : '0'; carSpd.style.opacity = '1'; carSpd.textContent = Math.round(Math.abs(CAR.v) * 3.6) + ' km/h'; }
   else { const n = carNear(); carUI.textContent = 'E  DRIVE'; carUI.style.opacity = n ? '1' : '0'; carSpd.style.opacity = '0'; }
-  // the motor: a rising whine and the air tearing past, both with the speed
+  // no motor: only air, faint and coming and going. Two layers of noise, a low soft rush and a thin high hiss, each swelling and
+  // fading on its own slow gusts and drifting a little from ear to ear; louder and brighter with the speed, never loud
   if (CAR.on && AC && AC.state === 'running' && !eng) {
     try {
-      const o = AC.createOscillator(), o2 = AC.createOscillator(), lp = AC.createBiquadFilter(), g = AC.createGain(); o.type = 'sawtooth'; o2.type = 'sine'; lp.type = 'lowpass'; lp.frequency.value = 900; g.gain.value = 0;
-      o.connect(lp); o2.connect(lp); lp.connect(g); g.connect(out); o.start(); o2.start();
-      const n = AC.sampleRate * 2, b = AC.createBuffer(1, n, AC.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
-      const s = AC.createBufferSource(); s.buffer = b; s.loop = true; const bp = AC.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.5; const wg = AC.createGain(); wg.gain.value = 0;
-      s.connect(bp); bp.connect(wg); wg.connect(out); wg.connect(verb); s.start(); eng = { o, o2, g, bp, wg };
+      const mk = (brown) => { const n = AC.sampleRate * 4, b = AC.createBuffer(1, n, AC.sampleRate), d = b.getChannelData(0); let l = 0;
+        for (let i = 0; i < n; i++) { const w = Math.random() * 2 - 1; if (brown) { l = (l + 0.02 * w) / 1.02; d[i] = l * 3.5; } else d[i] = w; }
+        const s = AC.createBufferSource(); s.buffer = b; s.loop = true; s.start(0, Math.random() * 3); return s; };
+      const lay = (brown, type, q) => { const s = mk(brown), f = AC.createBiquadFilter(); f.type = type; f.Q.value = q; const g = AC.createGain(); g.gain.value = 0;
+        const pn = AC.createStereoPanner ? AC.createStereoPanner() : null; s.connect(f); f.connect(g); if (pn) { g.connect(pn); pn.connect(out); } else g.connect(out); return { f, g, pn }; };
+      const lo = lay(true, 'lowpass', 0.4), hi = lay(false, 'bandpass', 0.7), send = AC.createGain(); send.gain.value = 0.25; hi.g.connect(send); send.connect(verb);
+      eng = { lo, hi, ph: Math.random() * 100 };
     } catch (e) { eng = { failed: true }; }
   }
   if (eng && !eng.failed) {
-    const k = clamp(Math.abs(CAR.v) / CAR_MAX, 0, 1), t = AC.currentTime, on = CAR.on ? 1 : 0;
-    eng.o.frequency.setTargetAtTime(45 + 260 * k, t, 0.1); eng.o2.frequency.setTargetAtTime(90 + 520 * k, t, 0.1);
-    eng.g.gain.setTargetAtTime(on * (0.025 + 0.05 * k), t, 0.2); eng.bp.frequency.setTargetAtTime(300 + 2200 * k, t, 0.2); eng.wg.gain.setTargetAtTime(on * 0.25 * k, t, 0.2);
+    const k = clamp(Math.abs(CAR.v) / CAR_MAX, 0, 1), t = AC.currentTime, on = CAR.on ? 1 : 0, T = (eng.ph += dt);
+    const gust = (a, b2, c) => clamp(0.5 + 0.32 * Math.sin(T * a) + 0.22 * Math.sin(T * b2 + 1.7) + 0.16 * Math.sin(T * c + 4.1), 0, 1);   // slow, uneven swells
+    const g1 = gust(0.37, 0.91, 1.73), g2 = gust(0.53, 1.29, 2.31), sp = Math.sqrt(k);
+    eng.lo.f.frequency.setTargetAtTime(160 + 520 * k + 120 * g1, t, 0.3); eng.lo.g.gain.setTargetAtTime(on * (0.004 + 0.05 * sp) * (0.25 + 0.75 * g1), t, 0.35);
+    eng.hi.f.frequency.setTargetAtTime(700 + 1700 * k + 500 * g2, t, 0.3); eng.hi.g.gain.setTargetAtTime(on * 0.022 * sp * g2 * g2, t, 0.4);
+    if (eng.lo.pn) eng.lo.pn.pan.setTargetAtTime(0.35 * Math.sin(T * 0.21), t, 0.5);
+    if (eng.hi.pn) eng.hi.pn.pan.setTargetAtTime(0.5 * Math.sin(T * 0.33 + 2.0), t, 0.5);
   }
 }
 
