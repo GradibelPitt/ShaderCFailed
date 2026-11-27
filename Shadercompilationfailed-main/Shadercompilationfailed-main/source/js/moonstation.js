@@ -743,9 +743,9 @@ function renderMirror() {
   mirrorCam.up.copy(_u); mirrorCam.lookAt(mirrorCam.position.clone().add(_f)); mirrorCam.updateMatrixWorld();
   mirrorCam.projectionMatrix.copy(camera.projectionMatrix); mirrorCam.projectionMatrixInverse.copy(camera.projectionMatrixInverse);
   uMirrorVP.value.multiplyMatrices(mirrorCam.projectionMatrix, mirrorCam.matrixWorldInverse);
-  floor.visible = false; sky.material.uniforms.uSun.value = 0;
+  floor.visible = false; sky.material.uniforms.uSun.value = 0; for (const m of PLAT) m.visible = false;
   renderer.setRenderTarget(refl); renderer.clear(); renderer.render(scene, mirrorCam); renderer.setRenderTarget(null);
-  floor.visible = true; sky.material.uniforms.uSun.value = 1;
+  floor.visible = true; sky.material.uniforms.uSun.value = 1; for (const m of PLAT) m.visible = true;
 }
 
 /* ---------------- post ---------------- */
@@ -1238,30 +1238,53 @@ function megaFrame(t) {
   }
 }
 
-// the platform itself: a sheet of glass with no edge to it, 600 m deep, from the right-hand side of the hall to 5 km past the cliff, and no
-// rail: looking down through it, the Moon a long way below; looking along it, it gathers the light and shines, so you can tell it is there.
-// (You still cannot walk off it.)
+// the platform itself: 600 m deep, from the right-hand side of the hall to 5 km past the cliff, no rail along it (you still cannot walk off).
+// Its top is done like the floor of the hall, only pale: great slabs with joints between them and finer lines inside, stained and mottled,
+// polished, damp here and there, and the hall and the sky seen in it (the same upside-down picture the hall's floor looks up), not as deep.
+// Little lamps are let into it along its edges, so the edge reads in the dark.
+const PLAT = [];   // left out of the floor's mirror picture, as the floor is
 {
-  const glassMat = new THREE.ShaderMaterial({
-    uniforms: { uCam, uTime, uMirrorVP }, vertexShader: VERT, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+  const box = (x0, y0, z0, x1, y1, z1) => { const b = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0); b.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2); return b; };
+  PLAT.push(add(box(XLP, -24, PZ1, XR + 900, -0.02, ZE), mat(7)));   // the slab
+  const platMat = new THREE.ShaderMaterial({
+    uniforms: { uCam, uTime, uMirrorVP, uRefl: floorMat.uniforms.uRefl, uPx: floorMat.uniforms.uPx },
+    vertexShader: VERT,
     fragmentShader: `#include <logdepthbuf_pars_fragment>
     ${NOISE}${LIGHT}
-    varying vec3 vW; varying vec3 vN; varying vec4 vR; varying vec2 vUv2;
+    uniform sampler2D uRefl; uniform vec2 uPx;
+    varying vec3 vW; varying vec3 vN; varying vec4 vR;
+    float lines(float v, float period, float w){ float f = abs(fract(v / period + 0.5) - 0.5) * period; float aa = fwidth(v) * 1.2; return 1.0 - smoothstep(w - aa, w + aa, f); }
     void main(){
       #include <logdepthbuf_fragment>
-      vec3 n = vec3(0.0, 1.0, 0.0), v = normalize(uCam - vW);
-      float fr = 0.04 + 0.96 * pow(1.0 - abs(v.y), 5.0);                 // clear looking down, a mirror at a glancing angle
-      float px = length(fwidth(vW)) + 1e-3;
-      float sm = fbm3(vW * 0.05) * 0.6 + fbm3(vW * 0.9) * 0.4 * (1.0 - smoothstep(0.3, 1.2, px));   // faint smudges and dust on it
-      vec3 c = shade(vW, n, vec3(0.50, 0.56, 0.62) * (0.8 + 0.4 * sm), 0.12, 1.8);
-      c += vec3(0.13, 0.17, 0.23) * fr;                                                        // the cold sky in it, at a glancing angle
-      c += vec3(1.0, 0.96, 0.9) * 2.2 * pow(clamp(dot(reflect(-v, n), normalize(vec3(-0.45, 0.62, 0.62))), 0.0, 1.0), 600.0);   // and the sun glinting off it
-      float a = clamp(0.24 + 0.66 * fr + 0.08 * smoothstep(0.45, 0.8, sm), 0.0, 0.92);
-      gl_FragColor = vec4(haze(c, vW), a);
+      vec2 q = vW.xz; float px = length(fwidth(vW)) + 1e-3;
+      float big = fbm3(vec3(q / 420.0, 11.0)), mid = fbm3(vec3(q / 38.0, 13.0)), small = noise3(vec3(q / 2.6, 17.0));
+      float wet = clamp(smoothstep(0.45, 0.70, big) * 0.6 + smoothstep(0.50, 0.75, mid) * 0.3, 0.0, 1.0);
+      // slabs: great ones with a wide joint, a finer grid inside them, and each small slab its own shade
+      float j = max(lines(q.x, 120.0, 0.35), lines(q.y, 120.0, 0.35)), j2 = max(lines(q.x, 12.0, 0.03), lines(q.y, 12.0, 0.03));
+      vec2 sid = floor(q / 12.0); float st = fract(sin(dot(sid, vec2(127.1, 311.7))) * 43758.5453) * (1.0 - smoothstep(0.5, 3.0, px));
+      vec3 alb = vec3(0.60, 0.61, 0.62) * (0.80 + 0.30 * mid + 0.10 * small + 0.08 * (st - 0.5)) * (1.0 - 0.45 * j - 0.16 * j2);
+      alb *= 1.0 - 0.10 * smoothstep(0.55, 0.85, fbm3(vec3(q / 9.0, 19.0)));          // stains
+      vec3 n = vec3(0.0, 1.0, 0.0);
+      vec3 col = shade(vW, n, alb * (1.0 - 0.25 * wet), 0.5, 0.25) + alb * vec3(0.05, 0.06, 0.08);
+      // what is seen in it
+      vec2 uv = vR.xy / vR.w * 0.5 + 0.5;
+      vec2 wob = (vec2(noise3(vec3(q / 6.0, 1.0)), noise3(vec3(q / 6.0, 5.0))) - 0.5) * 0.012 * (1.2 - wet);
+      float rad = mix(10.0, 1.5, wet); vec3 rf = vec3(0.0);
+      for (int k = 0; k < 7; k++){ float a = float(k) * 2.39996; float r = sqrt(float(k) / 7.0) * rad; rf += texture2D(uRefl, uv + wob + vec2(cos(a), sin(a)) * r * uPx).rgb; }
+      rf /= 7.0;
+      vec3 v = normalize(uCam - vW);
+      float fres = 0.04 + 0.96 * pow(1.0 - max(v.y, 0.0), 5.0);
+      float k = mix(0.06, 0.55, wet) * mix(0.5, 1.0, fres);
+      col = col * (1.0 - k * 0.5) + rf * k;
+      gl_FragColor = vec4(haze(col, vW), 1.0);
     }`,
   });
   const g = new THREE.PlaneGeometry(XR + 900 - XLP, ZE - PZ1); g.rotateX(-Math.PI / 2); g.translate((XR + 900 + XLP) / 2, 0, (ZE + PZ1) / 2);
-  const glass = add(g, glassMat); glass.renderOrder = 2;
+  PLAT.push(add(g, platMat));
+  // the lamps let into the edges
+  const lp = []; for (let x = XL - 700; x > XLP; x -= 120) lp.push(x, 0.06, PZ1 + 0.8, x, 0.06, ZE - 0.8);
+  const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(lp, 3));
+  const lpt = new THREE.Points(lg, new THREE.PointsMaterial({ color: new THREE.Color(2.0, 2.2, 2.5), size: 2.0, sizeAttenuation: false, transparent: true, depthWrite: false })); lpt.frustumCulled = false; scene.add(lpt);
 }
 // where you can go: the hall, and the platform (with its own walls)
 function walkClamp(pos, m) {
