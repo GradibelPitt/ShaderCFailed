@@ -8,6 +8,7 @@
 // looks that picture up through its puddles. The sky (the Earth, the stars, the orange ring) is worked out per pixel on a sphere round the eye.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
@@ -26,6 +27,7 @@ SAVE.set('scene', 'moon');
 /* ---------------- measures (metres) ---------------- */
 const XL = -4300, XR = 4800, ZB = 3000, ZE = -9000, TOPY = 11800;   // cliff side, frame side (at the floor), back wall, the open end, where frames meet the cliff
 const PAR_H = 150, PAR_D = 120, STRIP_Y = 70;                        // the low wall at the open end, and its line of light
+const PZ1 = ZE - 600, XLP = XL - 5200;                                 // the white platform beyond the end of the hall: its outer edge, and its far (left) end
 const DOOR = { x: 600, w: 1.1, h: 2.25 };                             // the door you came in by, in the back wall
 const SL = Math.hypot(XR - XL, TOPY), SD = [(XL - XR) / SL, TOPY / SL], SN = [-SD[1], SD[0]];   // the frames' line: along it (up to the cliff), and across it into the hall
 // (SN points down and left, into the hall)
@@ -47,6 +49,7 @@ float noise3(vec3 x){ vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * 
   return mix(mix(mix(hash3(i), hash3(i + vec3(1,0,0)), f.x), mix(hash3(i + vec3(0,1,0)), hash3(i + vec3(1,1,0)), f.x), f.y),
              mix(mix(hash3(i + vec3(0,0,1)), hash3(i + vec3(1,0,1)), f.x), mix(hash3(i + vec3(0,1,1)), hash3(i + vec3(1,1,1)), f.x), f.y), f.z); }
 float fbm(vec3 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 6; i++){ s += a * noise3(p); p = p * 2.03 + vec3(1.7, 9.2, 3.1); a *= 0.5; } return s; }
+float fbm8(vec3 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 8; i++){ s += a * noise3(p); p = p * 2.02 + vec3(5.3, 2.9, 8.1); a *= 0.5; } return s; }
 float fbm3(vec3 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 3; i++){ s += a * noise3(p); p = p * 2.07 + vec3(4.1, 1.3, 7.7); a *= 0.5; } return s; }
 `;
 // light in the hall: what comes in from the open end (the Earth below it, bright and cold), the orange ring high up, the strip of white light
@@ -61,7 +64,7 @@ vec3 shade(vec3 p, vec3 n, vec3 alb, float rough, float spk){
   vec3 c = vec3(0.010, 0.013, 0.018);
   c += vec3(0.42, 0.60, 0.86) * 1.7 * (max(e, 0.0) * 0.82 + 0.18 * (e * 0.5 + 0.5)) * op;
   c += vec3(1.0, 0.36, 0.11) * 0.16 * max(dot(n, DIR_O), 0.0) * (0.3 + 0.7 * smoothstep(3000.0, 11000.0, p.y));
-  vec3 sp = vec3(clamp(p.x, -4300.0, 4800.0), ${STRIP_Y.toFixed(1)}, -9000.0); vec3 sd = sp - p; float dd = length(sd) + 1.0;
+  vec3 sp = vec3(clamp(p.x, -4300.0, 4800.0), ${STRIP_Y.toFixed(1)}, ${PZ1.toFixed(1)}); vec3 sd = sp - p; float dd = length(sd) + 1.0;
   c += vec3(0.85, 0.92, 1.0) * 1.1 * max(dot(n, sd / dd), 0.0) / (1.0 + dd * dd / (1000.0 * 1000.0));
   vec3 dl = vec3(${DOOR.x.toFixed(1)}, 2.75, 2999.6) - p; float dld = length(dl) + 0.01;
   c += vec3(1.0, 0.72, 0.42) * 1.6 * max(dot(n, dl / dld), 0.0) / (1.0 + dld * dld / 9.0);
@@ -123,6 +126,15 @@ void main(){
   // the little door: painted steel, a frame round it
   vec3 alb = vec3(0.30, 0.31, 0.30);
   col = shade(vW, n, alb, 0.4, 0.5);
+#elif KIND == 7
+  // the white platform and its rails
+  float g = max(lines(vW.x, 12.0, 0.04), lines(vW.z, 12.0, 0.04));
+  vec3 alb = vec3(0.66, 0.67, 0.68) * (0.92 + 0.12 * fbm3(vW * 0.05)) * (1.0 - 0.25 * g);
+  col = shade(vW, n, alb, 0.45, 0.4) + alb * vec3(0.05, 0.06, 0.08);
+#elif KIND == 6
+  // the car: glossy white paint, with a little light of its own so it never vanishes into the dark
+  vec3 alb = vec3(0.78, 0.79, 0.80);
+  col = shade(vW, n, alb, 0.22, 1.6) + alb * vec3(0.035, 0.04, 0.05) * (0.6 + 0.4 * max(n.y, 0.0));
 #else
   col = uBase; glow = 1.0;
 #endif
@@ -172,6 +184,8 @@ const CZ1 = ZE - 1700;   // the rock runs on past the end of the floor, out into
     if (z < ZE + 300) x -= Math.pow((ZE + 300 - z) / 1400, 2) * 900 * (0.6 + 0.4 * rfbm(y / 900, z / 900));   // its far edge breaks back, ragged
     p.setXYZ(i, x, y, z);
   }
+  // a slot at its foot where the platform runs out under it
+  { const ix = g.index.array, keep = []; for (let t = 0; t < ix.length; t += 3) { let cut = true; for (let q = 0; q < 3; q++) { const v = ix[t + q], y = p.getY(v), z = p.getZ(v); if (!(y < 112 && z > PZ1 - 70 && z < ZE + 70)) cut = false; } if (!cut) keep.push(ix[t], ix[t + 1], ix[t + 2]); } g.setIndex(keep); }
   g.computeVertexNormals(); add(g, mat(2));
 }
 
@@ -221,8 +235,8 @@ const floor = add((() => { const g = new THREE.PlaneGeometry(XR - XL + 1200, ZB 
   add(box(DOOR.x + 0.32, 1.0, ZB - 0.07, DOOR.x + 0.42, 1.04, ZB - 0.02), mat(4, [0.6, 0.6, 0.55], 'knob'));
   add(box(DOOR.x - 0.16, 2.68, ZB - 0.12, DOOR.x + 0.16, 2.78, ZB), mat(4, [6.0, 4.4, 2.6], 'doorlamp'));                        // the lamp over it
   // the low wall at the far end, and its line of light
-  add(box(XL - 600, 0, ZE - PAR_D, XR + 900, PAR_H, ZE), mat(3));
-  add(box(XL - 600, STRIP_Y - 14, ZE + 0.5, XR + 900, STRIP_Y + 14, ZE + 3), mat(4, [3.6, 3.9, 4.2], 'strip'));
+  add(box(XL - 600, 0, PZ1 - PAR_D, XR + 900, PAR_H, PZ1), mat(3));
+  add(box(XL - 600, STRIP_Y - 14, PZ1 + 0.5, XR + 900, STRIP_Y + 14, PZ1 + 3), mat(4, [3.6, 3.9, 4.2], 'strip'));
 }
 
 /* ---------------- little lights: how big it is ---------------- */
@@ -230,7 +244,7 @@ let blinkMat = null;
 {
   const white = [], red = [];
   // along the top of the low wall
-  for (let x = XL + 150; x < XR + 800; x += 260) white.push(x, PAR_H + 4, ZE - PAR_D / 2);
+  for (let x = XL + 150; x < XR + 800; x += 260) white.push(x, PAR_H + 4, PZ1 - PAR_D / 2);
   // on the front edge of every frame: red lights at intervals up it
   for (let z = ZB - 120; z >= ZE - 1; z -= 520) for (let u = 900; u < SL; u += 1700) { const x = XR + SD[0] * u + SN[0] * 290, y = SD[1] * u + SN[1] * 290; red.push(x, y, z - 58); }
   // a few far up the cliff, where something must once have been fixed to it
@@ -277,19 +291,40 @@ const sky = new THREE.Mesh(new THREE.SphereGeometry(30000, 64, 32), new THREE.Sh
     if (disc > 0.0 && b > 0.0) {
       tE = b - sqrt(disc);
       vec3 P = rd * tE, N = (P - C) / R;
-      float land = smoothstep(0.53, 0.57, fbm(N * 2.6 + 3.0));
-      vec3 surf = mix(vec3(0.010, 0.045, 0.12), mix(vec3(0.20, 0.17, 0.12), vec3(0.62, 0.62, 0.60), smoothstep(0.6, 0.8, fbm(N * 6.0))), land);
-      float cl = fbm(N * vec3(9.0, 16.0, 9.0) + vec3(0.0, 0.0, uTime * 0.0008)); cl = smoothstep(0.50, 0.80, cl + 0.16 * fbm(N * 42.0));
-      vec3 c = mix(surf, vec3(0.92, 0.93, 0.95), cl);
-      float lit = max(dot(N, S), 0.0);
+      // the ground: continents with ragged coasts (the sphere a little warped first, so nothing comes out round), shallow seas
+      // round them, green and dry country, mountains, ice toward the poles
+      vec3 Nw = N + (vec3(fbm(N * 4.0 + 1.0), fbm(N * 4.0 + 7.0), fbm(N * 4.0 + 13.0)) - 0.5) * 0.09;
+      float cont = fbm8(Nw * 3.2 + 3.0), land = smoothstep(0.515, 0.53, cont), shelf = smoothstep(0.47, 0.515, cont) * (1.0 - land);
+      float mtn = fbm8(Nw * 22.0 + 5.0), dry = smoothstep(0.42, 0.62, fbm(Nw * 7.0 + 2.0));
+      vec3 lc = mix(vec3(0.045, 0.085, 0.035), vec3(0.34, 0.25, 0.15), dry) * (0.7 + 0.6 * mtn);
+      lc = mix(lc, vec3(0.55, 0.52, 0.48), smoothstep(0.62, 0.72, mtn) * 0.6);                              // bare rock on the high ground
+      float lat = abs(dot(N, normalize(vec3(0.15, 1.0, 0.25))));
+      lc = mix(lc, vec3(0.86, 0.89, 0.92), smoothstep(0.80, 0.86, lat + 0.06 * fbm(Nw * 9.0)));             // ice
+      vec3 sea = mix(vec3(0.004, 0.028, 0.085), vec3(0.02, 0.13, 0.19), shelf);
+      vec3 surf = mix(sea, lc, land);
+      // the clouds: big swirling systems, streets of small ones, thin veils, and where they are thick a bluer grey underneath
+      vec3 cw = Nw + (vec3(fbm(Nw * 10.0 + 4.0), fbm(Nw * 10.0 + 9.0), fbm(Nw * 10.0 + 2.0)) - 0.5) * 0.06;
+      float c1 = fbm8(cw * vec3(7.0, 12.0, 7.0) + vec3(0.0, 0.0, uTime * 0.0006)), c2 = fbm8(cw * 34.0 + 3.0);
+      float cl = smoothstep(0.42, 0.68, c1 * 0.75 + c2 * 0.35 - 0.05), veil = smoothstep(0.40, 0.58, c1) * 0.3;
+      cl = max(cl, veil);
+      vec3 cloud = mix(vec3(0.70, 0.74, 0.80), vec3(0.97, 0.97, 0.98), smoothstep(0.4, 0.75, c2));
+      float lit = max(dot(N, S), 0.0), soft = smoothstep(-0.08, 0.25, dot(N, S));
       float mu = max(dot(N, -rd), 0.0);
-      col = c * (0.02 + 0.85 * lit);
-      col = mix(col, vec3(0.22, 0.42, 0.85) * (0.08 + 0.7 * lit), pow(1.0 - mu, 4.0) * 0.6);   // the air, seen at a slant toward the edge
+      // the cloud shadows on the ground, and the sun caught on open water
+      float shadow = smoothstep(0.46, 0.76, fbm8((cw + S * 0.004) * vec3(7.0, 12.0, 7.0) + vec3(0.0, 0.0, uTime * 0.0006)) * 0.82 + c2 * 0.32 - 0.04);
+      vec3 hh = normalize(S - rd); float glint = pow(max(dot(N, hh), 0.0), 220.0) * (1.0 - land) * (1.0 - cl);
+      vec3 c = mix(surf * (1.0 - 0.45 * shadow), cloud, cl);
+      col = c * (0.012 + 0.85 * lit * soft) + vec3(1.0, 0.95, 0.85) * glint * 1.6 * soft;
+      // the air over it: bluer and thicker toward the edge, warm along the line between day and night
+      float haze = pow(1.0 - mu, 7.0), term = smoothstep(0.0, 0.12, lit) * (1.0 - smoothstep(0.12, 0.35, lit));
+      col = mix(col, vec3(0.20, 0.42, 0.92) * (0.06 + 0.8 * soft), haze * 0.8) + vec3(0.015, 0.035, 0.08) * (1.0 - mu) * soft;
+      col += vec3(0.45, 0.16, 0.05) * term * haze * 0.5;
     } else if (b > 0.0) {
       // past the edge: a thin blazing line of air, then blue going to black
       float alt = sqrt(max(dot(C, C) - b * b, 0.0)) - R;
       vec3 Nl = normalize(rd * b - C); float lit = smoothstep(-0.25, 0.4, dot(Nl, S));
-      col += (vec3(0.30, 0.65, 1.0) * exp(-alt / 14.0) * 2.2 + vec3(0.06, 0.16, 0.45) * exp(-alt / 70.0)) * lit;
+      // past the edge: a hair-thin white-blue line, a band of blue, then a faint violet going off into black
+      col += (vec3(0.55, 0.80, 1.0) * exp(-alt / 6.0) * 2.4 + vec3(0.18, 0.50, 1.0) * exp(-alt / 22.0) * 0.9 + vec3(0.10, 0.12, 0.40) * exp(-alt / 80.0) * 0.22) * lit;
     }
     // the ring: a band of grey structure round the Earth, its inner edge lit orange
     vec3 Nr = normalize(vec3(-0.30, 0.42, 0.86));
@@ -389,12 +424,16 @@ function step(dt) {
   P.vel.y -= GRAV * dt; P.pos.addScaledVector(P.vel, dt);
   if (P.pos.y <= 0) { if (!P.ground && P.vel.y < -3) footstep(1.4); P.pos.y = 0; P.vel.y = 0; P.ground = true; }
   // the walls of the hall
-  P.pos.x = clamp(P.pos.x, XL + cliffOut(0, P.pos.z) + 4, XR - 700);
-  P.pos.z = clamp(P.pos.z, ZE + 1.2, ZB - 0.5);
+  walkClamp(P.pos, 0);
   const hs = Math.hypot(P.vel.x, P.vel.z);
   if (P.ground && hs > 0.3) { const b0 = P.bob; P.bob += hs * dt; if (Math.floor(b0 / 0.78) !== Math.floor(P.bob / 0.78)) footstep(hs > 3 ? 1.0 : 0.6); }
 }
 function placeCamera(t) {
+  if (CAR.on) {   // in the driver's seat, a little shake that grows with the speed
+    const c = Math.cos(CAR.yaw), s = Math.sin(CAR.yaw), k = clamp(Math.abs(CAR.v) / CAR_MAX, 0, 1), j = (Math.random() - 0.5) * 0.012 * k;
+    camera.position.set(CAR.x + c * SEAT[0] + s * SEAT[2], SEAT[1] + j, CAR.z - s * SEAT[0] + c * SEAT[2]);
+    camera.rotation.set(P.pitch, P.yaw, 0); camera.updateMatrixWorld(); return;
+  }
   const hs = Math.hypot(P.vel.x, P.vel.z);
   camera.position.set(P.pos.x, P.pos.y + EYE + Math.sin(P.bob * Math.PI * 2 / 1.56) * 0.025 * clamp(hs / 2, 0, 1), P.pos.z);
   camera.rotation.set(P.pitch, P.yaw, 0); camera.updateMatrixWorld();
@@ -436,7 +475,275 @@ function footstep(k) {
   const sm = el.querySelector('small'); sm.style.cssText = 'display:block;margin-top:10px;font-size:15px;letter-spacing:.6em;text-indent:.6em;color:#9fb0c2';
   setTimeout(() => { el.style.opacity = '1'; }, 2200); setTimeout(() => { el.style.opacity = '0'; }, 8200);
 }
-if (window.SCF_G) window.SCF_G.setPages(() => [{ t: 'Moon Station', html: '<p>A hall of the station over the Moon.</p><p>Walk to the light at the far end. It is a long way.</p><p>Hold <kbd>Shift</kbd> to run.</p>' }]);
+if (window.SCF_G) window.SCF_G.setPages(() => [{ t: 'Moon Station', html: '<p>A hall of the station over the Moon.</p><p>Walk to the light at the far end. It is a long way.</p><p>Hold <kbd>Shift</kbd> to run, or take the little tug by the door: <kbd>E</kbd> to get in.</p>' }]);
+
+/* ---------------- the platform, and the Moon below ---------------- */
+// Past the end of the hall the floor runs on as a white platform: across the open end, and on out to the left, under the foot of the
+// cliff and along the outside of the station for five kilometres. Walk to its far end and look down: the Moon, a long way below, grey-white
+// and cratered as far as you can see, and in the nearest crater a settlement dug into it: a wall of metal panels round the crater floor,
+// long stairs going down to it, a lit doorway, buildings cut into the slope; and more of the same, smaller and smaller, on into the distance.
+const OUT = { y: -700, sx: -10500, sz: -11000, cr: 1700 };   // the ground far below, and the crater with the settlement in it
+const SUN = new V3(-0.45, 0.62, 0.62).normalize();
+const outMat = (kind, base = [0, 0, 0]) => new THREE.ShaderMaterial({
+  uniforms: { uCam, uBase: { value: new V3(...base) }, uSun: { value: SUN } }, side: THREE.DoubleSide, defines: { KIND: kind },
+  vertexShader: VERT.replace('uniform mat4 uMirrorVP;', 'uniform mat4 uMirrorVP; uniform vec3 uBase;'),
+  fragmentShader: `#include <logdepthbuf_pars_fragment>
+  ${NOISE}
+  uniform vec3 uCam, uBase, uSun; varying vec3 vW; varying vec3 vN; varying vec4 vR;
+  void main(){
+    #include <logdepthbuf_fragment>
+    vec3 n = normalize(vN); if (dot(n, uCam - vW) < 0.0) n = -n;
+    float d = distance(uCam, vW), aa = clamp(1.0 - d / 9000.0, 0.0, 1.0);
+    vec3 col; float glow = 0.0;
+  #if KIND == 0
+    // regolith: grey-white dust, pocked with craters at every size down to a few metres, lumpy, with rocks strewn about;
+    // the small craters are drawn by bending the light (each one a bowl with a raised rim), so they stay sharp however close you get
+    vec2 xz = vW.xz; vec2 grad = vec2(0.0); float rocks = 0.0, cav = 0.0;
+    for (int sc = 0; sc < 4; sc++){
+      float S = sc == 0 ? 220.0 : sc == 1 ? 70.0 : sc == 2 ? 22.0 : 7.0;
+      float fade = clamp(1.0 - d / (S * 160.0), 0.0, 1.0); if (fade <= 0.0) continue;
+      vec2 cell = floor(xz / S);
+      for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++){
+        vec2 id = cell + vec2(float(i), float(j));
+        float h = hash3(vec3(id, float(sc) * 7.3)); if (h < 0.35) continue;
+        vec2 c = (id + 0.15 + 0.7 * vec2(hash3(vec3(id, 3.1 + float(sc))), hash3(vec3(id, 5.7 + float(sc))))) * S;
+        float R = S * (0.15 + 0.35 * hash3(vec3(id, 9.1 + float(sc))));
+        vec2 dv = xz - c; float r = length(dv) / R; if (r > 1.6) continue;
+        // slope of the profile: down into the bowl, up over the rim, gently down outside
+        float sl = r < 1.0 ? 2.2 * r : -3.0 * (r - 1.0) * exp(-pow((r - 1.0) * 3.0, 2.0)) * 2.0;
+        sl -= 1.6 * exp(-pow((r - 1.0) * 4.0, 2.0)) * (r - 1.0) * 4.0 * 0.5;
+        grad += normalize(dv + 1e-4) * sl * 0.22 * fade;
+        cav += (r < 1.0 ? (1.0 - r * r) : 0.0) * fade * 0.18;
+      }
+    }
+    // lumps and ripples of dust, then grain
+    float f1 = clamp(1.0 - d / 2500.0, 0.0, 1.0), f2 = clamp(1.0 - d / 600.0, 0.0, 1.0);
+    grad += (vec2(noise3(vec3(xz * 0.06, 1.0)), noise3(vec3(xz * 0.06, 7.0))) - 0.5) * 0.5 * f1;
+    grad += (vec2(noise3(vec3(xz * 0.5, 2.0)), noise3(vec3(xz * 0.5, 4.0))) - 0.5) * 0.45 * f2;
+    grad += (vec2(noise3(vec3(xz * 3.0, 3.0)), noise3(vec3(xz * 3.0, 6.0))) - 0.5) * 0.35 * clamp(1.0 - d / 90.0, 0.0, 1.0);
+    // rocks: small dark-and-bright specks, densest near the craters' rims
+    float rk = step(0.985, hash3(vec3(floor(xz / 2.5), 2.0))) * clamp(1.0 - d / 700.0, 0.0, 1.0);
+    vec3 pn = normalize(n + vec3(-grad.x, 0.0, -grad.y));
+    float g = noise3(vec3(xz * 0.004, 0.0)) * 0.55 + noise3(vec3(xz * 0.03, 9.0)) * 0.3 + noise3(vec3(xz * 0.2, 5.0)) * 0.15 * f1;
+    vec3 alb = mix(vec3(0.40, 0.42, 0.46), vec3(0.76, 0.79, 0.84), g) * (1.0 - 0.25 * cav) + rk * 0.15;
+    float sl = max(dot(pn, uSun), 0.0);
+    col = alb * (vec3(1.0, 0.98, 0.95) * 1.15 * sl + vec3(0.025, 0.035, 0.06));
+  #elif KIND == 1
+    // the panelled walls: grey metal sheet in tall panels, each a slightly different grey, ribs between
+    vec2 u = abs(n.y) > 0.5 ? vW.xz : vec2(vW.x + vW.z, vW.y);
+    float pid = floor(u.x / 6.0), rib = smoothstep(0.92, 1.0, abs(fract(u.x / 6.0) - 0.5) * 2.0);
+    vec3 alb = vec3(0.50, 0.53, 0.57) * (0.8 + 0.3 * hash3(vec3(pid, floor(u.y / 9.0), 1.0))) * (1.0 - 0.4 * rib);
+    float sl = max(dot(n, uSun), 0.0); vec3 v = normalize(uCam - vW);
+    col = alb * (vec3(1.0, 0.98, 0.95) * 1.1 * sl + vec3(0.05, 0.07, 0.11)) + vec3(0.8) * pow(max(dot(reflect(-uSun, n), v), 0.0), 40.0) * 0.5 * sl;
+  #elif KIND == 2
+    // white built things: the platform, the stairs, the buildings
+    vec3 alb = vec3(0.70, 0.71, 0.72);
+    float sl = max(dot(n, uSun), 0.0);
+    col = alb * (vec3(1.0, 0.98, 0.95) * 1.1 * sl + vec3(0.07, 0.09, 0.13));
+  #else
+    col = uBase; glow = 1.0;
+  #endif
+    // a very little blue in the distance, nothing like air: just enough that far things sit back
+    col = mix(col, vec3(0.03, 0.045, 0.07), (1.0 - exp(-d / 60000.0)) * (1.0 - glow * 0.7));
+    gl_FragColor = vec4(col, 1.0);
+  }`,
+});
+// the ground: craters on craters; the grid is fine under the settlement and coarse far off (it reaches some 60 km every way)
+const craters = [];
+{
+  const r = mulberry32(919);
+  craters.push([OUT.sx, OUT.sz, OUT.cr, 0.09, 1]);
+  for (let k = 0; k < 700; k++) { const R = 25 * Math.pow(400, r()), a = r() * Math.PI * 2, dist = 300 + r() * 90000; if (dist < 3800 + R) continue; craters.push([OUT.sx + Math.cos(a) * dist, OUT.sz + Math.sin(a) * dist * 0.9 - 6000, R, 0.12 + 0.12 * r()]); }
+}
+function groundH(x, z) {
+  const ds = Math.hypot(x - OUT.sx, z - OUT.sz), calm = 0.25 + 0.75 * clamp((ds - 2600) / 4000, 0, 1);   // the ground round the settlement is gentler
+  let h = (260 * rfbm(x / 9000, z / 9000) + 60 * rfbm(x / 1500 + 5, z / 1500)) * calm;
+  for (const [cx, cz, R, dp, flat] of craters) {
+    const dx = x - cx, dz = z - cz; if (Math.abs(dx) > R * 1.8 || Math.abs(dz) > R * 1.8) continue;
+    const d = Math.hypot(dx, dz) / R;
+    if (d < 1) h += R * dp * ((flat ? d * d * d * d : d * d) - 1) * 0.9; h += R * dp * 0.28 * Math.exp(-Math.pow((d - 1) * 3.2, 2));
+  }
+  const dd = Math.hypot(x - OUT.sx, z - OUT.sz);
+  return OUT.y + clamp(h, -2600, 380) - dd * dd / (2 * 1737000);   // and the ground curves away: the Moon is small
+}
+{
+  const N = 340, L = 115000, P = [], I = [];
+  const at = (s) => Math.sign(s) * s * s * L;
+  for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) { const x = OUT.sx + at(i / N * 2 - 1), z = OUT.sz + at(j / N * 2 - 1); P.push(x, groundH(x, z), z); }
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const a = j * (N + 1) + i; I.push(a, a + 1, a + N + 1, a + 1, a + N + 2, a + N + 1); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setIndex(I); g.computeVertexNormals();
+  const m = new THREE.Mesh(g, outMat(0)); m.frustumCulled = false; scene.add(m);
+}
+// the settlement, and the smaller ones scattered on into the distance
+{
+  const box = (x0, y0, z0, x1, y1, z1) => { const b = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0); b.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2); return b; };
+  const metal = [], white = [], warm = [], cold = [];
+  const floorY = groundH(OUT.sx, OUT.sz);
+  // a wall of panels most of the way round the crater floor
+  const WR = OUT.cr * 0.62, WH = 210;
+  for (let k = 0; k < 120; k++) {
+    const a0 = -0.4 + k / 120 * Math.PI * 1.55, a1 = a0 + Math.PI * 1.55 / 120;
+    const x0 = OUT.sx + Math.cos(a0) * WR, z0 = OUT.sz + Math.sin(a0) * WR, x1 = OUT.sx + Math.cos(a1) * WR, z1 = OUT.sz + Math.sin(a1) * WR;
+    const y0 = Math.min(groundH(x0, z0), groundH(x1, z1)) - 8, y1 = Math.max(groundH(x0, z0), groundH(x1, z1)) + WH;
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute([x0, y0, z0, x1, y0, z1, x1, y1, z1, x0, y0, z0, x1, y1, z1, x0, y1, z0], 3)); g.computeVertexNormals(); metal.push(g);
+    if (k % 6 === 0) metal.push(box(x0 - 5, y0, z0 - 5, x0 + 5, y1 + 8, z0 + 5));   // the ribs
+  }
+  // the lit doorway in it, and the warm room behind
+  { const a = 0.55, x = OUT.sx + Math.cos(a) * WR, z = OUT.sz + Math.sin(a) * WR, y = groundH(x, z);
+    warm.push(box(x - 55, y - 5, z - 55, x + 55, y + 130, z + 55)); }
+  // long stairs from the rim down to the floor, on trusses
+  for (const [a, len] of [[2.1, 1300], [2.7, 1200], [3.6, 1400]]) {
+    const xr = OUT.sx + Math.cos(a) * OUT.cr * 1.05, zr = OUT.sz + Math.sin(a) * OUT.cr * 1.05, yr = groundH(xr, zr) + 4;
+    const xb = OUT.sx + Math.cos(a) * WR * 0.75, zb = OUT.sz + Math.sin(a) * WR * 0.75, yb = floorY + 2;
+    const n = 90;
+    for (let k = 0; k < n; k++) { const t = k / n, x = xr + (xb - xr) * t, y = yr + (yb - yr) * t, z = zr + (zb - zr) * t, w = 16;
+      white.push(box(x - w, y - 1.2, z - w, x + w, y, z + w));
+      if (k % 6 === 0) metal.push(box(x - 4, Math.min(groundH(x, z), y) - 2, z - 4, x + 4, y, z + 4)); }
+  }
+  // buildings cut into the slope on the near side, terrace above terrace, a few windows lit
+  const r = mulberry32(55);
+  for (let k = 0; k < 26; k++) {
+    const a = 1.0 + r() * 1.6, rr = OUT.cr * (0.95 + r() * 0.5), x = OUT.sx + Math.cos(a) * rr, z = OUT.sz + Math.sin(a) * rr, y = groundH(x, z);
+    const w = 100 + r() * 220, d = 60 + r() * 120, hh = 40 + r() * 110;
+    white.push(box(x - w / 2, y - 10, z - d / 2, x + w / 2, y + hh, z + d / 2));
+    for (let q = 0; q < 3; q++) if (r() < 0.6) warm.push(box(x - w / 2 + 4 + q * (w - 8) / 3, y + hh * 0.35, z + d / 2, x - w / 2 + 4 + q * (w - 8) / 3 + (w - 8) / 4, y + hh * 0.6, z + d / 2 + 1.5));
+  }
+  // and outposts on and on: low blocks, panel walls, a light or two, smaller and further
+  const pts = [];
+  for (let k = 0; k < 140; k++) {
+    const a = r() * Math.PI * 2, dist = 1600 + Math.pow(r(), 0.7) * 40000, x = OUT.sx + Math.cos(a) * dist, z = OUT.sz + Math.sin(a) * dist - 4000, y = groundH(x, z);
+    const s = 0.6 + r() * 1.8;
+    for (let q = 0; q < 2 + (r() * 4 | 0); q++) { const ox = (r() - 0.5) * 300 * s, oz = (r() - 0.5) * 300 * s, w = (20 + r() * 60) * s, hh = (8 + r() * 25) * s, yy = groundH(x + ox, z + oz);
+      (r() < 0.5 ? white : metal).push(box(x + ox - w / 2, yy - 6, z + oz - w / 3, x + ox + w / 2, yy + hh, z + oz + w / 3)); }
+    pts.push(x, y + 30 * s, z);
+    if (r() < 0.5) { const ex = x + (r() - 0.5) * 200, ez = z + (r() - 0.5) * 200; pts.push(ex, groundH(ex, ez) + 15, ez); }
+  }
+  for (let k = 0; k < 60; k++) { const a = r() * 6.283, rr = r() * OUT.cr * 1.4, x = OUT.sx + Math.cos(a) * rr, z = OUT.sz + Math.sin(a) * rr; pts.push(x, groundH(x, z) + 6, z); }
+  const add2 = (geos, m) => { if (!geos.length) return; const me = new THREE.Mesh(mergeGeometries(geos.map((g) => { g = g.index ? g.toNonIndexed() : g; if (g.attributes.uv) g.deleteAttribute('uv'); if (!g.attributes.normal) g.computeVertexNormals(); return g; })), m); me.frustumCulled = false; scene.add(me); };
+  add2(metal, outMat(1)); add2(white, outMat(2)); add2(warm, outMat(3, [3.2, 2.0, 0.9]));
+  const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  const pm = new THREE.Points(pg, new THREE.PointsMaterial({ color: new THREE.Color(2.6, 2.1, 1.5), size: 2.2, sizeAttenuation: false, transparent: true, depthWrite: false })); pm.frustumCulled = false; scene.add(pm);
+}
+// the platform itself: white, 600 m deep, from the right-hand side of the hall to 5 km past the cliff; a low rail along the open parts
+{
+  const box = (x0, y0, z0, x1, y1, z1) => { const b = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0); b.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2); return b; };
+  add(box(XLP, -24, PZ1, XR + 900, 0, ZE), mat(7));
+  const cliffX = XL + cliffOut(0, ZE) - 900, rails = [];
+  const railRun = (x0, z0, x1, z1) => {
+    const L = Math.hypot(x1 - x0, z1 - z0), n = Math.ceil(L / 4);
+    for (let k = 0; k <= n; k++) { const x = x0 + (x1 - x0) * k / n, z = z0 + (z1 - z0) * k / n; rails.push(box(x - 0.04, 0, z - 0.04, x + 0.04, 1.1, z + 0.04)); }
+    const ax = Math.abs(x1 - x0) > Math.abs(z1 - z0);
+    for (const y of [0.55, 1.08]) rails.push(ax ? box(Math.min(x0, x1), y, z0 - 0.035, Math.max(x0, x1), y + 0.05, z0 + 0.035) : box(x0 - 0.035, y, Math.min(z0, z1), x0 + 0.035, y + 0.05, Math.max(z0, z1)));
+  };
+  railRun(XL - 600, PZ1 + 0.6, XLP + 0.6, PZ1 + 0.6);    // the outer edge, past the big wall
+  railRun(cliffX, ZE - 0.6, XLP + 0.6, ZE - 0.6);        // the inner edge, outside the hall
+  railRun(XLP + 0.6, PZ1 + 0.6, XLP + 0.6, ZE - 0.6);    // the far end
+  add(mergeGeometries(rails), mat(7));
+  // small lamps along it, so it reads in the dark
+  const lp = []; for (let x = XL - 700; x > XLP; x -= 120) lp.push(x, 1.3, PZ1 + 0.6, x, 1.3, ZE - 0.6);
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(lp, 3));
+  const p = new THREE.Points(g, new THREE.PointsMaterial({ color: new THREE.Color(2.0, 2.2, 2.5), size: 2.0, sizeAttenuation: false, transparent: true, depthWrite: false })); p.frustumCulled = false; scene.add(p);
+}
+// where you can go: the hall, and the platform (with its own walls)
+function walkClamp(pos, m) {
+  const cx = XL + cliffOut(0, Math.max(pos.z, ZE)) + 4 + m;
+  if (pos.z > ZE - m) {   // in the hall (or the strip where it meets the platform)
+    if (pos.x < cx) { if (pos.z < ZE + 2 * m + 2) pos.z = ZE - m; else pos.x = cx; }
+  }
+  if (pos.z <= ZE - m) { pos.x = clamp(pos.x, XLP + 1 + m, XR - 700 - m); pos.z = clamp(pos.z, PZ1 + 1.2 + m, ZE - m); }
+  else pos.x = Math.min(pos.x, XR - 700 - m);
+  pos.z = Math.min(pos.z, ZB - 0.5 - m);
+}
+
+/* ---------------- the car ---------------- */
+// The hall is far too big to walk, so by the door there is something to drive, absurdly fast. E to get in (and out,
+// once it has stopped). W to go, S to brake (and back up), A/D to steer, Space for the hand brake. Flat out it does about 640 m/s,
+// so the light at the far end is some twenty seconds away. It stops dead at the walls.
+const CAR = { x: DOOR.x + 7, z: ZB - 10, yaw: 0, v: 0, steer: 0, on: false, g: new THREE.Group(), hintT: 0, fov: 72 };
+const CAR_MAX = 640, CAR_ACC = 230, SEAT = [0.0, 1.62, 0.55], BUS = { hw: 0.75, hl: 1.45 };
+// It is one of those little airport tugs: no body to speak of, just a white chassis with a blue stripe, a big orange bonnet over the
+// front, one open seat behind it, a steering wheel, a bumper of bent tube, four fat black wheels.
+{
+  const box = (x0, y0, z0, x1, y1, z1) => { const b = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0); b.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2); return b; };
+  const white = [], dark = [], orange = [], blue = [], chrome = [];
+  white.push(box(-0.72, 0.38, -1.4, 0.72, 0.95, 1.35));                                 // the chassis
+  white.push(box(-0.74, 0.95, 0.1, 0.74, 1.05, 1.35));                                  // the deck round the seat
+  white.push(box(-0.72, 0.95, 1.1, 0.72, 1.35, 1.35));                                  // the back panel
+  blue.push(box(-0.725, 0.5, -1.4, -0.715, 0.6, 1.35), box(0.715, 0.5, -1.4, 0.725, 0.6, 1.35));   // the stripe
+  { const h = new RoundedBoxGeometry(1.42, 0.32, 1.45, 4, 0.12); h.translate(0, 1.08, -0.68); orange.push(h); }   // the bonnet
+  dark.push(box(-0.3, 1.05, 0.35, 0.3, 1.2, 0.95), box(-0.3, 1.2, 0.85, 0.3, 1.75, 0.98));                      // the seat
+  { const sw = new THREE.TorusGeometry(0.19, 0.022, 8, 28); sw.rotateX(-1.0); sw.translate(0, 1.42, 0.08); dark.push(sw); dark.push(new THREE.CylinderGeometry(0.025, 0.025, 0.5, 8).rotateX(-0.6).translate(0, 1.25, -0.04)); }
+  for (const sx of [-1, 1]) for (const sz of [-0.95, 0.95]) { const w = new THREE.CylinderGeometry(0.36, 0.36, 0.3, 22); w.rotateZ(Math.PI / 2); w.translate(sx * 0.66, 0.36, sz); dark.push(w); }
+  // the bumper: a frame of tube with uprights
+  const tube = (a, b) => { const A = new V3(...a), B = new V3(...b), d = B.clone().sub(A), c = new THREE.CylinderGeometry(0.03, 0.03, d.length(), 8); c.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new V3(0, 1, 0), d.clone().normalize())); c.translate((A.x + B.x) / 2, (A.y + B.y) / 2, (A.z + B.z) / 2); chrome.push(c); };
+  for (const y of [0.55, 0.85]) tube([-0.62, y, -1.55], [0.62, y, -1.55]);
+  for (const x of [-0.62, -0.2, 0.2, 0.62]) tube([x, 0.45, -1.55], [x, 0.9, -1.55]);
+  for (const x of [-0.62, 0.62]) tube([x, 0.7, -1.55], [x, 0.7, -1.38]);
+  const m = (geos, mt) => { const me = new THREE.Mesh(mergeGeometries(geos.map((g) => g.index ? g.toNonIndexed() : g)), mt); CAR.g.add(me); return me; };
+  m(white, mat(6)); m(dark, mat(4, [0.025, 0.025, 0.03], 'tyre'));
+  m(orange, mat(4, [0.62, 0.34, 0.08], 'bonnet')); m(blue, mat(4, [0.03, 0.12, 0.42], 'stripe')); m(chrome, mat(4, [0.42, 0.43, 0.45], 'tube'));
+  m([box(-0.62, 0.72, -1.42, -0.42, 0.82, -1.40), box(0.42, 0.72, -1.42, 0.62, 0.82, -1.40)], mat(4, [5.0, 5.0, 4.6], 'head'));
+  m([box(-0.62, 1.1, 1.35, -0.45, 1.2, 1.37), box(0.45, 1.1, 1.35, 0.62, 1.2, 1.37)], mat(4, [4.0, 0.3, 0.2], 'tail'));
+  m([box(-0.12, 1.235, -0.12, 0.12, 1.245, 0.02)], mat(4, [0.4, 1.2, 1.6], 'gauge'));
+  CAR.g.position.set(CAR.x, 0, CAR.z); scene.add(CAR.g);
+}
+const carUI = document.createElement('div');
+carUI.style.cssText = "position:fixed;left:0;right:0;bottom:7%;text-align:center;color:#dfe8f2;font:300 17px/1.4 'Segoe UI','Helvetica Neue',Arial,sans-serif;letter-spacing:.25em;opacity:0;transition:opacity .4s;pointer-events:none;z-index:4;text-shadow:0 0 10px rgba(0,0,0,.6)";
+const carSpd = document.createElement('div');
+carSpd.style.cssText = "position:fixed;right:4%;bottom:6%;color:#cfe0f0;font:200 40px/1 'Segoe UI Light','Segoe UI',Arial,sans-serif;letter-spacing:.08em;text-align:right;opacity:0;transition:opacity .4s;pointer-events:none;z-index:4";
+document.body.appendChild(carUI); document.body.appendChild(carSpd);
+const carNear = () => { if (CAR.on) return false; const dx = P.pos.x - CAR.x, dz = P.pos.z - CAR.z, c = Math.cos(CAR.yaw), s = Math.sin(CAR.yaw), lx = c * dx - s * dz, lz = s * dx + c * dz; return Math.abs(lx) < BUS.hw + 2.0 && Math.abs(lz) < BUS.hl + 1.6; };
+function carE() {
+  if (CAR.on) {
+    if (Math.abs(CAR.v) > 4) return;
+    CAR.on = false; CAR.v = 0;
+    const c = Math.cos(CAR.yaw), s = Math.sin(CAR.yaw);   // out on the driver's side
+    const lx = -BUS.hw - 1.0, lz = SEAT[2]; P.pos.set(CAR.x + c * lx + s * lz, 0, CAR.z - s * lx + c * lz); P.vel.set(0, 0, 0); return;
+  }
+  if (carNear()) { CAR.on = true; CAR.hintT = 7; P.vel.set(0, 0, 0); P.yaw = CAR.yaw; P.pitch = -0.22; initAudio(); }
+}
+addEventListener('keydown', (e) => { if (e.code === 'KeyE' && !e.repeat && !(window.SCF_G && window.SCF_G.isOpen())) carE(); });
+let eng = null;
+function drive(dt) {
+  if (keys.ArrowLeft) P.yaw += 1.8 * dt; if (keys.ArrowRight) P.yaw -= 1.8 * dt;
+  if (keys.ArrowUp) P.pitch = Math.min(1.5, P.pitch + 1.3 * dt); if (keys.ArrowDown) P.pitch = Math.max(-1.5, P.pitch - 1.3 * dt);
+  const thr = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0), st = (keys.KeyA ? 1 : 0) - (keys.KeyD ? 1 : 0), av = Math.abs(CAR.v);
+  if (thr > 0) CAR.v += CAR_ACC * dt * (1 - 0.55 * Math.max(CAR.v, 0) / CAR_MAX) * (CAR.v < 0 ? 3 : 1);
+  else if (thr < 0) CAR.v -= (CAR.v > 0 ? 420 : 12) * dt;
+  else CAR.v -= Math.sign(CAR.v) * Math.min(av, (6 + CAR.v * CAR.v * 0.0003) * dt);
+  if (keys.Space) CAR.v -= Math.sign(CAR.v) * Math.min(Math.abs(CAR.v), 650 * dt);
+  CAR.v = clamp(CAR.v, -20, CAR_MAX);
+  CAR.steer += (st - CAR.steer) * Math.min(1, dt * 6);
+  const yr = CAR.steer * 1.4 * clamp(Math.abs(CAR.v) / 6, 0, 1) / (1 + Math.abs(CAR.v) / 80) * (CAR.v < 0 ? -1 : 1);
+  CAR.yaw += yr * dt; P.yaw += yr * dt;   // the view turns with the car
+  CAR.x -= Math.sin(CAR.yaw) * CAR.v * dt; CAR.z -= Math.cos(CAR.yaw) * CAR.v * dt;
+  // the walls of the hall stop it dead
+  { const q = { x: CAR.x, z: CAR.z }; walkClamp(q, 2.5); if (Math.abs(q.x - CAR.x) + Math.abs(q.z - CAR.z) > 1e-6) { const hit = Math.abs(CAR.v); CAR.x = q.x; CAR.z = q.z; CAR.v *= -0.1; if (hit > 25) footstep(4); } }
+  P.pos.set(CAR.x, 0, CAR.z);
+}
+function carFrame(dt) {
+  CAR.g.position.set(CAR.x, 0, CAR.z); CAR.g.rotation.y = CAR.yaw;
+  // the view pulls wider the faster you go
+  const f = 72 + 16 * clamp(CAR.v / CAR_MAX, 0, 1); if (Math.abs(f - CAR.fov) > 0.05) { CAR.fov = f; camera.fov = f; camera.updateProjectionMatrix(); }
+  CAR.hintT = Math.max(0, CAR.hintT - dt);
+  if (CAR.on) { carUI.textContent = CAR.hintT > 0 ? 'W  GO  ·  S  BRAKE  ·  A D  STEER  ·  E  GET OUT' : (Math.abs(CAR.v) < 4 && CAR.hintT === 0 ? '' : ''); carUI.style.opacity = CAR.hintT > 0 ? '1' : '0'; carSpd.style.opacity = '1'; carSpd.textContent = Math.round(Math.abs(CAR.v) * 3.6) + ' km/h'; }
+  else { const n = carNear(); carUI.textContent = 'E  DRIVE'; carUI.style.opacity = n ? '1' : '0'; carSpd.style.opacity = '0'; }
+  // the motor: a rising whine and the air tearing past, both with the speed
+  if (CAR.on && AC && AC.state === 'running' && !eng) {
+    try {
+      const o = AC.createOscillator(), o2 = AC.createOscillator(), lp = AC.createBiquadFilter(), g = AC.createGain(); o.type = 'sawtooth'; o2.type = 'sine'; lp.type = 'lowpass'; lp.frequency.value = 900; g.gain.value = 0;
+      o.connect(lp); o2.connect(lp); lp.connect(g); g.connect(out); o.start(); o2.start();
+      const n = AC.sampleRate * 2, b = AC.createBuffer(1, n, AC.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+      const s = AC.createBufferSource(); s.buffer = b; s.loop = true; const bp = AC.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.5; const wg = AC.createGain(); wg.gain.value = 0;
+      s.connect(bp); bp.connect(wg); wg.connect(out); wg.connect(verb); s.start(); eng = { o, o2, g, bp, wg };
+    } catch (e) { eng = { failed: true }; }
+  }
+  if (eng && !eng.failed) {
+    const k = clamp(Math.abs(CAR.v) / CAR_MAX, 0, 1), t = AC.currentTime, on = CAR.on ? 1 : 0;
+    eng.o.frequency.setTargetAtTime(45 + 260 * k, t, 0.1); eng.o2.frequency.setTargetAtTime(90 + 520 * k, t, 0.1);
+    eng.g.gain.setTargetAtTime(on * (0.025 + 0.05 * k), t, 0.2); eng.bp.frequency.setTargetAtTime(300 + 2200 * k, t, 0.2); eng.wg.gain.setTargetAtTime(on * 0.25 * k, t, 0.2);
+  }
+}
 
 /* ---------------- loop ---------------- */
 canvas.style.display = 'block';
@@ -444,7 +751,8 @@ let last = -1, fadeT = 0;
 function frame(now) {
   requestAnimationFrame(frame);
   if (last < 0) last = now; const dt = clamp((now - last) / 1000, 0, 1 / 20); last = now; uTime.value += dt; fadeT += dt;
-  if (!(window.SCF_G && window.SCF_G.isOpen())) step(dt);
+  if (!(window.SCF_G && window.SCF_G.isOpen())) { if (CAR.on) drive(dt); else step(dt); }
+  carFrame(dt);
   placeCamera(uTime.value); uCam.value.copy(camera.position);
   // dust: kept round you, drifting
   { const a = dust.a, c = camera.position, t = uTime.value;
@@ -457,4 +765,4 @@ function frame(now) {
 }
 requestAnimationFrame(frame);
 // a handle for testing from the console
-window.__moon = { P, camera, skipFade() { fadeT = 99; } };
+window.__moon = { P, camera, CAR, carE, skipFade() { fadeT = 99; } };
