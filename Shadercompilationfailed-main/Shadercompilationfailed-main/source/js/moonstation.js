@@ -31,6 +31,7 @@ const PZ1 = ZE - 600, XLP = XL - 5200;                                 // the wh
 const DOOR = { x: 600, w: 1.1, h: 2.25 };                             // the door you came in by, in the back wall
 const SL = Math.hypot(XR - XL, TOPY), SD = [(XL - XR) / SL, TOPY / SL], SN = [-SD[1], SD[0]];   // the frames' line: along it (up to the cliff), and across it into the hall
 // (SN points down and left, into the hall)
+const WALL_H = SD[1] * 900 + SN[1] * 290;   // the back wall stops here, level with the lowest row of red lamps on the frames (about 536 m); above it, open space
 
 /* ---------------- renderer ---------------- */
 const canvas = document.getElementById('c');
@@ -506,11 +507,13 @@ const floorMat = new THREE.ShaderMaterial({
   }`,
 });
 const floor = add((() => { const g = new THREE.PlaneGeometry(XR - XL + 1200, ZB - ZE); g.rotateX(-Math.PI / 2); g.translate((XR + XL) / 2 + 400, 0, (ZB + ZE) / 2); return g; })(), floorMat);
-// the back wall (a great plane; only the part inside the hall is ever seen), with the door
+// the back wall (a great plane; only the part inside the hall is ever seen), with the door. It goes up only to WALL_H, its top a thick
+// straight edge; above it the back of the hall is open, and you look out into space (and at the sun, from the middle of the hall)
 {
-  const s = new THREE.Shape([new THREE.Vector2(-7000, 0), new THREE.Vector2(DOOR.x - DOOR.w / 2, 0), new THREE.Vector2(DOOR.x - DOOR.w / 2, DOOR.h), new THREE.Vector2(DOOR.x + DOOR.w / 2, DOOR.h), new THREE.Vector2(DOOR.x + DOOR.w / 2, 0), new THREE.Vector2(7000, 0), new THREE.Vector2(7000, 14000), new THREE.Vector2(-7000, 14000)]);
+  const s = new THREE.Shape([new THREE.Vector2(-7000, 0), new THREE.Vector2(DOOR.x - DOOR.w / 2, 0), new THREE.Vector2(DOOR.x - DOOR.w / 2, DOOR.h), new THREE.Vector2(DOOR.x + DOOR.w / 2, DOOR.h), new THREE.Vector2(DOOR.x + DOOR.w / 2, 0), new THREE.Vector2(7000, 0), new THREE.Vector2(7000, WALL_H), new THREE.Vector2(-7000, WALL_H)]);
   const g = new THREE.ShapeGeometry(s); g.translate(0, 0, ZB); add(g, mat(3));
   const box = (x0, y0, z0, x1, y1, z1) => { const b = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0); b.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2); return b; };
+  add(box(-7000, WALL_H - 24, ZB, 7000, WALL_H, ZB + 90), mat(3));                                                                 // its top edge, with some thickness to it
   add(box(DOOR.x - DOOR.w / 2, 0, ZB - 0.02, DOOR.x + DOOR.w / 2, DOOR.h, ZB + 0.04), mat(5));                                   // the door, shut
   add(mergeGeometries([box(DOOR.x - DOOR.w / 2 - 0.08, 0, ZB - 0.06, DOOR.x - DOOR.w / 2, DOOR.h + 0.08, ZB), box(DOOR.x + DOOR.w / 2, 0, ZB - 0.06, DOOR.x + DOOR.w / 2 + 0.08, DOOR.h + 0.08, ZB),
     box(DOOR.x - DOOR.w / 2 - 0.08, DOOR.h, ZB - 0.06, DOOR.x + DOOR.w / 2 + 0.08, DOOR.h + 0.08, ZB)]), mat(5));
@@ -541,7 +544,7 @@ let blinkMat = null;
 // worked out per pixel from the direction looked in, in kilometres: the Earth 420 km below (its upper edge about 13 degrees above level, straight
 // ahead out of the open end; the station keeps its own "down"), its thin bright air, the stars, and a ring round it, one edge of which glows orange
 const sky = new THREE.Mesh(new THREE.SphereGeometry(30000, 64, 32), new THREE.ShaderMaterial({
-  uniforms: { uTime }, side: THREE.BackSide, depthWrite: false, depthTest: false,
+  uniforms: { uTime, uSun: { value: 1 } }, side: THREE.BackSide, depthWrite: false, depthTest: false,
   vertexShader: `#include <common>
   #include <logdepthbuf_pars_vertex>
   varying vec3 vD; void main(){ vD = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
@@ -549,8 +552,20 @@ const sky = new THREE.Mesh(new THREE.SphereGeometry(30000, 64, 32), new THREE.Sh
   }`,
   fragmentShader: `#include <logdepthbuf_pars_fragment>
   ${NOISE}
-  uniform float uTime; varying vec3 vD;
+  uniform float uTime, uSun; varying vec3 vD;
   const float R = 6371.0, H = 420.0;
+  // a galaxy far off, seen as a smudge: its disc turned at a slant (incl), turned in the picture (pa), with spiral arms if arms > 0
+  float galaxy(vec3 rd, vec3 dir, float size, float incl, float pa, float arms){
+    if (dot(rd, dir) < 0.99) return 0.0;
+    vec3 ex = normalize(cross(dir, vec3(0.0, 1.0, 0.0))), ey = cross(ex, dir);
+    vec2 p = vec2(dot(rd, ex), dot(rd, ey)) / size; float c = cos(pa), s = sin(pa); p = vec2(c * p.x - s * p.y, s * p.x + c * p.y); p.y /= cos(incl);
+    float r = length(p); if (r > 3.5) return 0.0;
+    float th = atan(p.y, p.x), sp = 0.5 + 0.5 * cos(2.0 * (th - 2.4 * log(r + 0.06)));
+    float knots = fbm(vec3(p * 7.0, size * 300.0));
+    float disk = exp(-r * 2.0) * mix(1.0, sp * (0.4 + 1.0 * knots), arms);
+    float lane = arms > 0.0 ? 1.0 - 0.5 * smoothstep(0.35, 0.65, knots) * exp(-r * 1.5) * (1.0 - sp) : 1.0;
+    return disk * lane + exp(-r * r * 30.0) * 1.4;
+  }
   void main(){
     #include <logdepthbuf_fragment>
     vec3 rd = normalize(vD);
@@ -561,6 +576,41 @@ const sky = new THREE.Mesh(new THREE.SphereGeometry(30000, 64, 32), new THREE.Sh
     // stars
     vec3 q = rd * 420.0, id = floor(q); float h = hash3(id);
     if (h > 0.9975) { vec3 c = id + 0.5 + (vec3(hash3(id + 1.3), hash3(id + 2.7), hash3(id + 5.1)) - 0.5) * 0.6; float d = length(q - c); col += vec3(0.75, 0.82, 1.0) * smoothstep(0.16, 0.0, d) * (0.4 + 2.2 * fract(h * 931.7)); }
+    // Behind the station (only that half of the sky: what lies ahead, out of the open end, is left as it was): our own galaxy, a great band
+    // of star clouds across it with lanes and rifts of dark dust, its core a warm glow low down, dense faint stars along it, red and grey-blue
+    // gas here and there; and other galaxies far off. All of it faint: it is only seen, it lights nothing.
+    float back = smoothstep(-0.05, 0.40, rd.z);
+    if (back > 0.0) {
+      vec3 Gc = normalize(vec3(0.02, 0.10, 1.0)), Ng = normalize(cross(Gc, normalize(vec3(-0.62, 0.78, 0.0)))), Gb = cross(Ng, Gc);
+      float gb = dot(rd, Ng), gl = atan(dot(rd, Gb), dot(rd, Gc));
+      float wv = 0.06 + 0.11 * exp(-gl * gl / 0.30);                                  // the band thickens toward the core
+      float wav = gb - 0.022 * sin(gl * 2.3 + 1.0) - 0.008 * sin(gl * 6.1);
+      float band = exp(-pow(wav / wv, 2.0));
+      float clouds = fbm(rd * 9.0) * 0.55 + fbm(rd * 33.0) * 0.45;
+      float dust = smoothstep(0.42, 0.70, fbm(rd * 14.0 + 3.0)) * exp(-pow((wav + 0.012) / (wv * 0.5), 2.0));
+      float rift = exp(-pow((wav - 0.006 * sin(gl * 7.0)) / (wv * 0.16), 2.0)) * smoothstep(0.30, 0.60, fbm(rd * 6.0 + 9.0));
+      float core = exp(-(gl * gl + pow(gb * 1.7, 2.0)) / 0.045);
+      vec3 mw = mix(vec3(0.40, 0.47, 0.62), vec3(0.95, 0.76, 0.52), clamp(core * 1.4 + exp(-gl * gl / 0.5) * 0.35, 0.0, 1.0));
+      float I = (band * (0.30 + 1.0 * smoothstep(0.32, 0.78, clouds)) + core * 1.3) * (1.0 - 0.88 * clamp(dust + rift, 0.0, 1.0));
+      vec3 gcol = mw * I * 0.075;
+      // the faint stars thick in the band (and a few out of it)
+      vec3 q2 = rd * 560.0, id2 = floor(q2); float h2 = hash3(id2 + 0.37);
+      if (h2 > 0.992 - 0.10 * band * (1.0 - dust)) { vec3 c2 = id2 + 0.5 + (vec3(hash3(id2 + 1.7), hash3(id2 + 3.1), hash3(id2 + 4.9)) - 0.5) * 0.5;
+        gcol += mix(vec3(0.78, 0.85, 1.0), vec3(1.0, 0.84, 0.66), hash3(id2 + 8.0)) * smoothstep(0.30, 0.0, length(q2 - c2)) * (0.12 + 0.55 * fract(h2 * 517.3)); }
+      // glowing gas along it
+      float neb = smoothstep(0.56, 0.80, fbm(rd * 7.0 + 21.0)) * exp(-pow(wav / (wv * 1.5), 2.0));
+      gcol += mix(vec3(0.70, 0.16, 0.26), vec3(0.22, 0.40, 0.58), smoothstep(0.42, 0.60, fbm(rd * 4.0 + 5.0))) * neb * 0.045 * (0.5 + fbm(rd * 40.0));
+      // other galaxies: a big spiral at a slant, a thin one edge-on, a round one; and faint specks of more, far beyond
+      gcol += vec3(0.80, 0.84, 1.0) * galaxy(rd, normalize(vec3(-0.34, 0.30, 0.89)), 0.034, 1.05, 0.7, 1.0) * 0.11;
+      gcol += vec3(0.95, 0.90, 0.82) * galaxy(rd, normalize(vec3(0.10, 0.36, 0.93)), 0.020, 1.50, -0.5, 0.0) * 0.10;
+      gcol += vec3(1.0, 0.88, 0.72) * galaxy(rd, normalize(vec3(-0.30, 0.13, 0.95)), 0.008, 0.55, 0.3, 0.0) * 0.12;
+      { vec3 q3 = rd * 70.0, id3 = floor(q3); float h3 = hash3(id3 + 2.9);
+        if (h3 > 0.93) { vec3 c3 = id3 + 0.5 + (vec3(hash3(id3 + 4.1), hash3(id3 + 6.3), hash3(id3 + 7.7)) - 0.5) * 0.6, dv = q3 - c3;
+          vec3 ax = normalize(vec3(hash3(id3 + 9.1), hash3(id3 + 1.9), hash3(id3 + 3.3)) - 0.5); float al = dot(dv, ax);
+          float d3 = length(dv - ax * al * 0.65);   // stretched along its own axis
+          gcol += vec3(0.85, 0.85, 0.95) * exp(-d3 * d3 / 0.0045) * 0.05 * (0.4 + fract(h3 * 77.0)); } }
+      col += gcol * back;
+    }
     // the Earth
     float b = dot(rd, C), cc = dot(C, C) - R * R, disc = b * b - cc, tE = 1e9;
     if (disc > 0.0 && b > 0.0) {
@@ -658,6 +708,17 @@ const sky = new THREE.Mesh(new THREE.SphereGeometry(30000, 64, 32), new THREE.Sh
         if (x < -0.0026) col += vec3(0.45, 0.7, 1.0) * 0.7 * exp((x + 0.0026) / 0.014) * exp(-y * y / (0.00035 * 0.00035));
       }
     }
+    // the sun, behind the station: seen through the open top of the back wall from the middle of the hall. Only a white disc, its edge
+    // darkening, and a thin uneven corona round it; kept dim enough that it lights nothing and hardly blooms (and the floor's mirror leaves it out)
+    {
+      vec3 SU = normalize(vec3(-0.15, 0.45, 0.88)); float sa = length(rd - SU), R0 = 0.0105;
+      float limb = sqrt(max(1.0 - (sa / R0) * (sa / R0), 0.0));
+      float disc = 1.0 - smoothstep(R0 * 0.94, R0, sa);
+      vec3 ex = normalize(cross(SU, vec3(0.0, 1.0, 0.0))), ey = cross(ex, SU); float ang = atan(dot(rd, ey), dot(rd, ex));
+      float rays = 0.65 + 0.7 * noise3(vec3(cos(ang) * 3.0, sin(ang) * 3.0, 1.0)) * noise3(vec3(cos(ang) * 9.0, sin(ang) * 9.0, 4.0)) * 2.0;
+      float cor = (0.16 * exp(-max(sa - R0, 0.0) / 0.006) * rays + 0.035 * exp(-max(sa - R0, 0.0) / 0.05)) * step(R0 * 0.94, sa);
+      col = mix(col, vec3(1.0, 0.97, 0.92) * (0.85 + 0.45 * limb), disc * uSun) + vec3(1.0, 0.90, 0.76) * cor * uSun;
+    }
     gl_FragColor = vec4(col, 1.0);
   }`,
 }));
@@ -682,9 +743,9 @@ function renderMirror() {
   mirrorCam.up.copy(_u); mirrorCam.lookAt(mirrorCam.position.clone().add(_f)); mirrorCam.updateMatrixWorld();
   mirrorCam.projectionMatrix.copy(camera.projectionMatrix); mirrorCam.projectionMatrixInverse.copy(camera.projectionMatrixInverse);
   uMirrorVP.value.multiplyMatrices(mirrorCam.projectionMatrix, mirrorCam.matrixWorldInverse);
-  floor.visible = false;
+  floor.visible = false; sky.material.uniforms.uSun.value = 0;
   renderer.setRenderTarget(refl); renderer.clear(); renderer.render(scene, mirrorCam); renderer.setRenderTarget(null);
-  floor.visible = true;
+  floor.visible = true; sky.material.uniforms.uSun.value = 1;
 }
 
 /* ---------------- post ---------------- */
@@ -1177,25 +1238,30 @@ function megaFrame(t) {
   }
 }
 
-// the platform itself: white, 600 m deep, from the right-hand side of the hall to 5 km past the cliff; a low rail along the open parts
+// the platform itself: a sheet of glass with no edge to it, 600 m deep, from the right-hand side of the hall to 5 km past the cliff, and no
+// rail: looking down through it, the Moon a long way below; looking along it, it gathers the light and shines, so you can tell it is there.
+// (You still cannot walk off it.)
 {
-  const box = (x0, y0, z0, x1, y1, z1) => { const b = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0); b.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2); return b; };
-  add(box(XLP, -24, PZ1, XR + 900, 0, ZE), mat(7));
-  const cliffX = XL + cliffOut(0, ZE) - 900, rails = [];
-  const railRun = (x0, z0, x1, z1) => {
-    const L = Math.hypot(x1 - x0, z1 - z0), n = Math.ceil(L / 4);
-    for (let k = 0; k <= n; k++) { const x = x0 + (x1 - x0) * k / n, z = z0 + (z1 - z0) * k / n; rails.push(box(x - 0.04, 0, z - 0.04, x + 0.04, 1.1, z + 0.04)); }
-    const ax = Math.abs(x1 - x0) > Math.abs(z1 - z0);
-    for (const y of [0.55, 1.08]) rails.push(ax ? box(Math.min(x0, x1), y, z0 - 0.035, Math.max(x0, x1), y + 0.05, z0 + 0.035) : box(x0 - 0.035, y, Math.min(z0, z1), x0 + 0.035, y + 0.05, Math.max(z0, z1)));
-  };
-  railRun(XL - 600, PZ1 + 0.6, XLP + 0.6, PZ1 + 0.6);    // the outer edge, past the big wall
-  railRun(cliffX, ZE - 0.6, XLP + 0.6, ZE - 0.6);        // the inner edge, outside the hall
-  railRun(XLP + 0.6, PZ1 + 0.6, XLP + 0.6, ZE - 0.6);    // the far end
-  add(mergeGeometries(rails), mat(7));
-  // small lamps along it, so it reads in the dark
-  const lp = []; for (let x = XL - 700; x > XLP; x -= 120) lp.push(x, 1.3, PZ1 + 0.6, x, 1.3, ZE - 0.6);
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(lp, 3));
-  const p = new THREE.Points(g, new THREE.PointsMaterial({ color: new THREE.Color(2.0, 2.2, 2.5), size: 2.0, sizeAttenuation: false, transparent: true, depthWrite: false })); p.frustumCulled = false; scene.add(p);
+  const glassMat = new THREE.ShaderMaterial({
+    uniforms: { uCam, uTime, uMirrorVP }, vertexShader: VERT, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    fragmentShader: `#include <logdepthbuf_pars_fragment>
+    ${NOISE}${LIGHT}
+    varying vec3 vW; varying vec3 vN; varying vec4 vR; varying vec2 vUv2;
+    void main(){
+      #include <logdepthbuf_fragment>
+      vec3 n = vec3(0.0, 1.0, 0.0), v = normalize(uCam - vW);
+      float fr = 0.04 + 0.96 * pow(1.0 - abs(v.y), 5.0);                 // clear looking down, a mirror at a glancing angle
+      float px = length(fwidth(vW)) + 1e-3;
+      float sm = fbm3(vW * 0.05) * 0.6 + fbm3(vW * 0.9) * 0.4 * (1.0 - smoothstep(0.3, 1.2, px));   // faint smudges and dust on it
+      vec3 c = shade(vW, n, vec3(0.50, 0.56, 0.62) * (0.8 + 0.4 * sm), 0.12, 1.8);
+      c += vec3(0.13, 0.17, 0.23) * fr;                                                        // the cold sky in it, at a glancing angle
+      c += vec3(1.0, 0.96, 0.9) * 2.2 * pow(clamp(dot(reflect(-v, n), normalize(vec3(-0.45, 0.62, 0.62))), 0.0, 1.0), 600.0);   // and the sun glinting off it
+      float a = clamp(0.24 + 0.66 * fr + 0.08 * smoothstep(0.45, 0.8, sm), 0.0, 0.92);
+      gl_FragColor = vec4(haze(c, vW), a);
+    }`,
+  });
+  const g = new THREE.PlaneGeometry(XR + 900 - XLP, ZE - PZ1); g.rotateX(-Math.PI / 2); g.translate((XR + 900 + XLP) / 2, 0, (ZE + PZ1) / 2);
+  const glass = add(g, glassMat); glass.renderOrder = 2;
 }
 // where you can go: the hall, and the platform (with its own walls)
 function walkClamp(pos, m) {
@@ -1210,15 +1276,16 @@ function walkClamp(pos, m) {
 
 /* ---------------- the car ---------------- */
 // The hall is far too big to walk, so by the door there is something to drive, absurdly fast. E to get in (and out,
-// once it has stopped). W to go, S to brake (and back up), A/D to steer, Space for the hand brake. Flat out it does about 160 m/s,
+// once it has stopped; F hides the car's body, and brings it back). W to go, S to brake (and back up), A/D to steer, Space for the hand brake. Flat out it does about 160 m/s,
 // so the light at the far end is a bit over a minute away. It stops dead at the walls.
-const CAR = { x: DOOR.x + 7, z: ZB - 10, yaw: 0, v: 0, steer: 0, sv: 0, yr: 0, on: false, g: new THREE.Group(), hintT: 0, fov: 72, roll: 0, wheels: [], hide: null, keep: [] };
+const CAR = { x: DOOR.x + 7, z: ZB - 10, yaw: 0, v: 0, steer: 0, sv: 0, yr: 0, on: false, g: new THREE.Group(), hintT: 0, fov: 72, roll: 0, wheels: [], hide: null, keep: [], bare: false, pT: null, tipT: 0 };
+// bare: the car hidden while you drive (F), nothing of it left in view, so the floor streams past uncovered; pT: a pitch the view eases to
 const CAR_MAX = 160, CAR_ACC = 75, SEAT = [0.0, 1.62, 0.6], BUS = { hw: 0.75, hl: 1.55 };
 // It is an airport baggage tug, done as close to the real thing as I can: a white steel body with a blue stripe and rounded edges, a big
 // orange bonnet with a grille, round headlamps, black fenders over fat treaded tyres on steel rims (the wheels turn, the front ones steer),
 // a bent-tube bumper, mirrors, an open seat behind a small dash with gauges, a step plate in chequered aluminium, a tow hitch, tail lamps
-// and an amber beacon. While you drive, all of it is left out but the top of the dash with its two gauges, a thin edge at the bottom of the
-// view, so the floor and what shines in it stream past under you uncovered.
+// and an amber beacon. While you drive the seat back, the beacon and the back panel are left out; press F and the whole car goes, so the
+// floor and what shines in it stream past under you (F again: it is back).
 {
   const RB = (sx, sy, sz, r, cx, cy, cz) => { const g = new RoundedBoxGeometry(sx, sy, sz, 3, Math.min(r, sx / 2 - 1e-3, sy / 2 - 1e-3, sz / 2 - 1e-3)); g.translate(cx, cy, cz); return g; };
   const BX = (x0, y0, z0, x1, y1, z1) => { const b = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0); b.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2); return b; };
@@ -1291,21 +1358,28 @@ const carUI = document.createElement('div');
 carUI.style.cssText = "position:fixed;left:0;right:0;bottom:7%;text-align:center;color:#dfe8f2;font:300 17px/1.4 'Segoe UI','Helvetica Neue',Arial,sans-serif;letter-spacing:.25em;opacity:0;transition:opacity .4s;pointer-events:none;z-index:4;text-shadow:0 0 10px rgba(0,0,0,.6)";
 const carSpd = document.createElement('div');
 carSpd.style.cssText = "position:fixed;right:4%;bottom:6%;color:#cfe0f0;font:200 40px/1 'Segoe UI Light','Segoe UI',Arial,sans-serif;letter-spacing:.08em;text-align:right;opacity:0;transition:opacity .4s;pointer-events:none;z-index:4";
-document.body.appendChild(carUI); document.body.appendChild(carSpd);
+const carTip = document.createElement('div');
+carTip.style.cssText = "position:fixed;left:0;right:0;bottom:12%;text-align:center;color:#dfe8f2;font:300 14px/1.4 'Segoe UI','Helvetica Neue',Arial,sans-serif;letter-spacing:.25em;opacity:0;transition:opacity .4s;pointer-events:none;z-index:4;text-shadow:0 0 10px rgba(0,0,0,.6)";
+carTip.textContent = 'TIP  ·  PRESS  F  TO HIDE THE CAR';
+document.body.appendChild(carUI); document.body.appendChild(carSpd); document.body.appendChild(carTip);
 const carNear = () => { if (CAR.on) return false; const dx = P.pos.x - CAR.x, dz = P.pos.z - CAR.z, c = Math.cos(CAR.yaw), s = Math.sin(CAR.yaw), lx = c * dx - s * dz, lz = s * dx + c * dz; return Math.abs(lx) < BUS.hw + 2.0 && Math.abs(lz) < BUS.hl + 1.6; };
 function carE() {
   if (CAR.on) {
     if (Math.abs(CAR.v) > 4) return;
-    CAR.on = false; CAR.v = 0;
+    CAR.on = false; CAR.v = 0; CAR.bare = false; CAR.pT = null; CAR.tipT = 0;
     const c = Math.cos(CAR.yaw), s = Math.sin(CAR.yaw);   // out on the driver's side
     const lx = -BUS.hw - 1.0, lz = SEAT[2]; P.pos.set(CAR.x + c * lx + s * lz, 0, CAR.z - s * lx + c * lz); P.vel.set(0, 0, 0); return;
   }
-  if (carNear()) { CAR.on = true; CAR.hintT = 7; CAR.steer = CAR.sv = CAR.yr = CAR.roll = 0; P.vel.set(0, 0, 0); P.yaw = CAR.yaw; P.pitch = -0.02; initAudio(); }
+  if (carNear()) { CAR.on = true; CAR.hintT = 7; CAR.tipT = 6; CAR.bare = false; CAR.pT = null; CAR.steer = CAR.sv = CAR.yr = CAR.roll = 0; P.vel.set(0, 0, 0); P.yaw = CAR.yaw; P.pitch = -0.22; initAudio(); }
 }
-addEventListener('keydown', (e) => { if (e.code === 'KeyE' && !e.repeat && !(window.SCF_G && window.SCF_G.isOpen())) carE(); });
+function carBare(b) { CAR.bare = b; CAR.pT = b ? -0.02 : -0.22; CAR.tipT = 0; }
+addEventListener('keydown', (e) => { if (e.repeat || (window.SCF_G && window.SCF_G.isOpen())) return;
+  if (e.code === 'KeyE') carE(); else if (e.code === 'KeyF' && CAR.on) carBare(!CAR.bare); });
 let eng = null;
 function drive(dt) {
   if (keys.ArrowLeft) P.yaw += 1.8 * dt; if (keys.ArrowRight) P.yaw -= 1.8 * dt;
+  if (keys.ArrowUp || keys.ArrowDown) CAR.pT = null;
+  if (CAR.pT !== null) { P.pitch += (CAR.pT - P.pitch) * Math.min(1, dt * 5); if (Math.abs(CAR.pT - P.pitch) < 0.002) CAR.pT = null; }
   if (keys.ArrowUp) P.pitch = Math.min(1.5, P.pitch + 1.3 * dt); if (keys.ArrowDown) P.pitch = Math.max(-1.5, P.pitch - 1.3 * dt);
   const thr = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0), st = (keys.KeyA ? 1 : 0) - (keys.KeyD ? 1 : 0), av = Math.abs(CAR.v);
   if (thr > 0) CAR.v += CAR_ACC * dt * (1 - 0.55 * Math.max(CAR.v, 0) / CAR_MAX) * (CAR.v < 0 ? 3 : 1);
@@ -1331,12 +1405,14 @@ function carFrame(dt) {
   CAR.g.position.set(CAR.x, 0, CAR.z); CAR.g.rotation.y = CAR.yaw;
   // the wheels roll with the speed, the front ones turn with the steering; and while you drive the car itself is left out but for the dash
   for (const w of CAR.wheels) { w.spin.rotation.x -= CAR.v * dt / 0.36; if (w.front) w.piv.rotation.y = CAR.steer * 0.5 / (1 + Math.abs(CAR.v) / 60); }
-  for (const ch of CAR.g.children) ch.visible = !CAR.on || CAR.keep.includes(ch);   // driving: only the dash's top edge is left,
-  for (const me of CAR.keep) me.position.y = CAR.on ? -0.17 : 0;                        // sunk so that it is just a sliver along the bottom
-  // the view pulls a little wider the faster you go (only a little: wider would bring the dash up into it)
-  const f = 72 + 7 * clamp(CAR.v / CAR_MAX, 0, 1); if (Math.abs(f - CAR.fov) > 0.05) { CAR.fov = f; camera.fov = f; camera.updateProjectionMatrix(); }
-  CAR.hintT = Math.max(0, CAR.hintT - dt);
-  if (CAR.on) { carUI.textContent = CAR.hintT > 0 ? 'W  GO  ·  S  BRAKE  ·  A D  STEER  ·  E  GET OUT' : (Math.abs(CAR.v) < 4 && CAR.hintT === 0 ? '' : ''); carUI.style.opacity = CAR.hintT > 0 ? '1' : '0'; carSpd.style.opacity = '1'; carSpd.textContent = Math.round(Math.abs(CAR.v) * 3.6) + ' km/h'; }
+  // the car as it is, the seat back, beacon and back panel left out while you drive; or, hidden (F), none of it at all
+  const bare = CAR.on && CAR.bare;
+  for (const ch of CAR.g.children) ch.visible = !bare && !(CAR.on && ch === CAR.hide);
+  // the view pulls wider the faster you go
+  const f = 72 + 16 * clamp(CAR.v / CAR_MAX, 0, 1); if (Math.abs(f - CAR.fov) > 0.05) { CAR.fov = f; camera.fov = f; camera.updateProjectionMatrix(); }
+  CAR.hintT = Math.max(0, CAR.hintT - dt); CAR.tipT = Math.max(0, CAR.tipT - dt);
+  carTip.style.opacity = CAR.on && CAR.tipT > 0 ? '1' : '0';   // the tip: once each time you get in, gone after a few seconds or the first F
+  if (CAR.on) { carUI.textContent = CAR.hintT > 0 ? 'W  GO  ·  S  BRAKE  ·  A D  STEER  ·  F  HIDE CAR  ·  E  GET OUT' : (Math.abs(CAR.v) < 4 && CAR.hintT === 0 ? '' : ''); carUI.style.opacity = CAR.hintT > 0 ? '1' : '0'; carSpd.style.opacity = '1'; carSpd.textContent = Math.round(Math.abs(CAR.v) * 3.6) + ' km/h'; }
   else { const n = carNear(); carUI.textContent = 'E  DRIVE'; carUI.style.opacity = n ? '1' : '0'; carSpd.style.opacity = '0'; }
   // no motor: only air, faint and coming and going. Two layers of noise, a low soft rush and a thin high hiss, each swelling and
   // fading on its own slow gusts and drifting a little from ear to ear; louder and brighter with the speed, never loud

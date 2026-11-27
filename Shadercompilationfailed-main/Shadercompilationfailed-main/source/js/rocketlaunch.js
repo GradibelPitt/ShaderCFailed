@@ -3,6 +3,8 @@
 // you set it down on the landing in front of you and it swells up, far bigger than it ever was, until it stands over you. E on it and you
 // are inside, looking out of its round window: the stairs fall away past the glass, faster and faster, then break up and tumble away,
 // colour seeps back in, the grey turns blue, white air tears past the glass... and you are there.
+// Before you are inside, three shots from outside (letterboxed): the burn catching at its foot, smoke rolling over the landing; alongside it,
+// climbing with it; and from high up the stairwell, looking down, its fire coming up at you as the stairs break up below it, until it is on you.
 // Kept in the save (window.SCF_SAVE):
 //   rocketAt        [x, y, z, yaw] where the rocket stands in the void (one block of it, repeated like everything there), or nothing
 //   rocketLaunched  true once it has taken you up
@@ -147,8 +149,9 @@
     s.connect(f); f.connect(g); g.connect(c.destination); s.start(t); s.stop(t + 3);
   }
 
-  /* ---------------- the flight: inside, looking out of the window ---------------- */
-  const T_END = 14.8;
+  /* ---------------- the launch: three shots from outside, then the flight, inside, looking out of the window ---------------- */
+  const T_END = 14.8;   // the flight seen from inside
+  const T_PRE = 8.9;    // before it, three shots from outside (EXT, below): the burn catching, alongside it, and from high up the well
   function launch() {
     RK.busy = true; if (EQ()) EQ().prompt(null);
     try { if (document.exitPointerLock && document.pointerLockElement) document.exitPointerLock(); } catch (e) {}
@@ -159,23 +162,50 @@
     const g2 = cv.getContext('webgl2', { antialias: false });
     if (!g2) { setTimeout(() => { location.href = 'moonstation.html'; }, 1500); return; }
     const sh = (ty, src) => { const s = g2.createShader(ty); g2.shaderSource(s, src); g2.compileShader(s); if (!g2.getShaderParameter(s, g2.COMPILE_STATUS)) throw new Error(g2.getShaderInfoLog(s)); return s; };
-    const pr = g2.createProgram();
-    g2.attachShader(pr, sh(g2.VERTEX_SHADER, '#version 300 es\nvoid main(){ vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }'));
-    g2.attachShader(pr, sh(g2.FRAGMENT_SHADER, FLY)); g2.linkProgram(pr);
-    const uRes = g2.getUniformLocation(pr, 'uRes'), uT = g2.getUniformLocation(pr, 'uT');
-    rumble();
-    const t0 = performance.now();
-    const step = () => {
-      const t = (performance.now() - t0) / 1000;
-      const sc = Math.min(1, Math.sqrt(1.6e6 / (innerWidth * innerHeight))), w = Math.round(innerWidth * sc), h = Math.round(innerHeight * sc);
+    const VS = '#version 300 es\nvoid main(){ vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }';
+    const prog = (fs) => { const pr = g2.createProgram(); g2.attachShader(pr, sh(g2.VERTEX_SHADER, VS)); g2.attachShader(pr, sh(g2.FRAGMENT_SHADER, fs)); g2.linkProgram(pr);
+      if (!g2.getProgramParameter(pr, g2.LINK_STATUS)) throw new Error(g2.getProgramInfoLog(pr)); return { pr, uRes: g2.getUniformLocation(pr, 'uRes'), uT: g2.getUniformLocation(pr, 'uT') }; };
+    const fly = prog(FLY); let ext = null; try { ext = prog(EXT); } catch (e) { console.warn('rocket: outside shots failed, going straight in', e); }
+    const pre = ext ? T_PRE : 0;
+    const draw = (P, t, sc) => { const w = Math.max(64, Math.round(innerWidth * sc)), h = Math.max(36, Math.round(innerHeight * sc));
       if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
-      g2.viewport(0, 0, w, h); g2.useProgram(pr); g2.uniform2f(uRes, w, h); g2.uniform1f(uT, t); g2.drawArrays(g2.TRIANGLES, 0, 3);
-      if (t < T_END) requestAnimationFrame(step); else location.href = 'moonstation.html';
+      g2.viewport(0, 0, w, h); g2.useProgram(P.pr); g2.uniform2f(P.uRes, w, h); g2.uniform1f(P.uT, t); g2.drawArrays(g2.TRIANGLES, 0, 3); };
+    // draw each picture once (both come out black at time 0) so the driver has really built them, and only then start the clock and the
+    // sound: the first draw of a big shader can stall for a second or more, and that must not eat the first shot
+    if (ext) draw(ext, 0, 0.25); draw(fly, 0, 0.25); g2.finish();
+    let t0 = -1, q = 1, last = 0;
+    const step = (now) => {
+      if (t0 < 0) { t0 = now; last = now; if (ext) outsideSound(); rumble(pre); }
+      const t = (now - t0) / 1000, fdt = now - last; last = now;
+      // keep it moving: if frames come slowly, draw smaller (and a little larger again once they come quickly)
+      if (fdt > 45) q = Math.max(0.4, q * 0.85); else if (fdt < 24) q = Math.min(1, q * 1.03);
+      // the shots from outside are the heavier picture: drawn a little smaller to start with
+      const sc = q * Math.min(1, Math.sqrt((t < pre ? 1.1e6 : 1.6e6) / (innerWidth * innerHeight)));
+      draw(t < pre ? ext : fly, t < pre ? t : t - pre, sc);
+      if (t < pre + T_END) requestAnimationFrame(step); else location.href = 'moonstation.html';
     };
     requestAnimationFrame(step);
   }
-  function rumble() {
-    const c = ac(); if (!c) return; const t = c.currentTime;
+  // the sound of the shots from outside: the burn catching (a crack, a thump, a splutter), its roar close to; alongside, the roar and the
+  // landings rushing by; from up the well, far off at first and swelling as it comes, and the stairs giving way below it, slam after slam
+  function outsideSound() {
+    const c = ac(); if (!c) return; const t = c.currentTime + 0.05;
+    const burst = (at, dur, type, f, gain) => { const b = noiseSrc(c, dur + 0.1), fl = c.createBiquadFilter(), g = c.createGain(); fl.type = type; fl.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t + at); g.gain.exponentialRampToValueAtTime(gain, t + at + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + at + dur); b.connect(fl); fl.connect(g); g.connect(c.destination); b.start(t + at); b.stop(t + at + dur + 0.1); };
+    for (const at of [0.32, 0.45, 0.61, 0.74, 0.86]) burst(at, 0.12, 'bandpass', 900 + Math.random() * 600, 0.25);   // the splutter
+    burst(0.95, 0.5, 'highpass', 1500, 0.3);                                                                     // and it catches
+    { const o = c.createOscillator(), g = c.createGain(); o.frequency.setValueAtTime(70, t + 0.95); o.frequency.exponentialRampToValueAtTime(28, t + 1.6); g.gain.setValueAtTime(0.0001, t + 0.95); g.gain.exponentialRampToValueAtTime(0.5, t + 0.98); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.7); o.connect(g); g.connect(c.destination); o.start(t + 0.95); o.stop(t + 1.8); }
+    // the roar: loud and low by it, louder alongside, then far down the well and swelling, cut dead on the white
+    const s = noiseSrc(c, 4); s.loop = true; const lp = c.createBiquadFilter(); lp.type = 'lowpass'; const g = c.createGain();
+    lp.frequency.setValueAtTime(150, t + 0.9); lp.frequency.linearRampToValueAtTime(520, t + 2.7); lp.frequency.setValueAtTime(900, t + 2.7); lp.frequency.setValueAtTime(260, t + 5.5); lp.frequency.exponentialRampToValueAtTime(1400, t + T_PRE - 0.1);
+    g.gain.setValueAtTime(0.0001, t + 0.9); g.gain.exponentialRampToValueAtTime(0.5, t + 1.5); g.gain.setValueAtTime(0.5, t + 2.7); g.gain.setValueAtTime(0.6, t + 2.71);
+    g.gain.setValueAtTime(0.6, t + 5.49); g.gain.setValueAtTime(0.06, t + 5.5); g.gain.exponentialRampToValueAtTime(0.7, t + T_PRE - 0.1); g.gain.exponentialRampToValueAtTime(0.0001, t + T_PRE + 0.05);
+    s.connect(lp); lp.connect(g); g.connect(c.destination); s.start(t + 0.9); s.stop(t + T_PRE + 0.2);
+    for (let k = 0; k < 7; k++) burst(2.8 + k * 0.38, 0.3, 'bandpass', 500 + k * 40, 0.12);                    // landings going by
+    for (let k = 0; k < 8; k++) burst(5.8 + k * 0.36 + Math.random() * 0.12, 0.7, 'lowpass', 220 + Math.random() * 260, 0.08 + 0.05 * k);   // the stairs giving way
+  }
+  function rumble(off) {
+    const c = ac(); if (!c) return; const t = c.currentTime + (off || 0);
     // the burn: a roar that keeps on building all the way, lower and rougher at first, brighter as it goes
     const s = noiseSrc(c, 4); s.loop = true; const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(140, t); lp.frequency.linearRampToValueAtTime(900, t + T_END - 1);
     const g = c.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.45, t + 1.2); g.gain.setValueAtTime(0.45, t + T_END - 1.5); g.gain.exponentialRampToValueAtTime(0.0001, t + T_END);
@@ -303,5 +333,182 @@
     col = col / (1.0 + col * 0.35);
     o = vec4(pow(max(col, 0.0), vec3(1.0 / 2.2)), 1.0);
   }`;
-  window.__rk = { RK, launch };   // a handle for testing from the console
+  // The three shots before you are inside, one picture worked out per pixel like the flight: (1) close by the foot of the rocket in the dark
+  // void, the burn catching, smoke rolling out over the landing at you; (2) alongside it, climbing with it, the stairs streaming down behind;
+  // (3) from high up, straight down the stairwell it goes up: its fire coming up out of the dark at you, the stairs breaking up and falling
+  // away below it, one after another, until it is on you. The void keeps its grey; only the rocket and its fire have colour.
+  const EXT = `#version 300 es
+  precision highp float;
+  uniform vec2 uRes; uniform float uT; out vec4 o;
+  float hash1(float n){ return fract(sin(n) * 43758.5453); }
+  float hash3(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+  float noise3(vec3 x){ vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(mix(hash3(i), hash3(i + vec3(1,0,0)), f.x), mix(hash3(i + vec3(0,1,0)), hash3(i + vec3(1,1,0)), f.x), f.y),
+               mix(mix(hash3(i + vec3(0,0,1)), hash3(i + vec3(1,0,1)), f.x), mix(hash3(i + vec3(0,1,1)), hash3(i + vec3(1,1,1)), f.x), f.y), f.z); }
+  float fbm(vec3 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++){ s += a * noise3(p); p = p * 2.03 + vec3(1.7, 9.2, 3.1); a *= 0.5; } return s; }
+  float sdBox(vec3 p, vec3 b){ vec3 q = abs(p) - b; return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0); }
+  float sdBox2(vec2 p, vec2 b){ vec2 q = abs(p) - b; return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0); }
+  mat2 rot(float a){ float c = cos(a), s = sin(a); return mat2(c, -s, s, c); }
+  // the stair void (the same as seen from inside: a landing in every cell, a slanted flight in most, columns at the corners)
+  float vbase(vec3 p){
+    vec3 c = vec3(44.0, 16.0, 44.0), id = floor(p / c), q = p - (id + 0.5) * c; float h = hash3(id);
+    float d = sdBox(q - vec3(0.0, -7.0, 0.0), vec3(7.0, 0.7 + 3.5 * step(0.6, h), 7.0));
+    if (h > 0.3) d = min(d, sdBox(vec3(q.x, q.y - q.z * 0.36 + 0.5, q.z), vec3(1.5 + 3.5 * hash3(id + 3.0), 0.5, 14.0)));
+    vec3 k = vec3(abs(q.x) - 22.0, q.y, abs(q.z) - 22.0);
+    d = min(d, sdBox(k, vec3(2.6, 9.0, 2.6)));
+    if (hash3(id + 7.0) > 0.5) d = min(d, sdBox(q - vec3(0.0, 5.0, 22.0), vec3(22.0, 1.1, 1.6)));
+    return d;
+  }
+  const float TA = 2.7, TB = 5.5, TC = ${T_PRE.toFixed(2)};   // where each shot ends
+  float rkY(float t){ float s = max(t - 1.75, 0.0); return 2.0 * s * s + 1.6 * s * s * s; }   // the height of its foot
+  float gT, gY, gIgn; vec3 gRk;
+  // the rocket as it is in the void: a lathe-turned body (radius at height y), bulging a little in its eight gores, four fins, the window
+  float rkR(float y){ float r = 1.05 + 0.33 * sin(clamp(y / 2.6, 0.0, 1.0) * 1.5708) - 0.16 * smoothstep(2.6, 4.7, y); float u = clamp((y - 4.7) / 2.5, 0.0, 1.0); return r * sqrt(max(1.0 - u * u, 0.0)); }
+  float sdRocket(vec3 p, out float mid){
+    float th = atan(p.z, p.x), y = clamp(p.y, 0.0, 7.2);
+    float r = rkR(y) * (1.0 + 0.045 * pow(abs(sin(th * 4.0)), 0.6));
+    float d = max((length(p.xz) - r) * 0.8, max(-p.y, p.y - 7.2));
+    mid = p.y >= 5.2 ? 1.0 : (p.y < 0.5 ? 2.0 : 0.0);
+    vec2 q = abs(rot(0.785398) * p.xz); vec2 fq = vec2(max(q.x, q.y), min(q.x, q.y));   // the fins, folded into one
+    float f2 = max(sdBox2(vec2(fq.x - 1.75, p.y - 1.3), vec2(0.6, 1.3)), dot(vec2(fq.x, p.y) - vec2(2.2, 0.9), vec2(0.884, 0.468)));
+    float df = max(f2, fq.y - 0.09);
+    if (df < d){ d = df; mid = 3.0; }
+    return d;
+  }
+  // the stairs, and, once the rocket has gone up past them, coming apart: cut into chunks, each shoved out from the well, turned and dropped
+  float stairs(vec3 p){
+    const float CS = 7.0; vec3 cid = floor(p / CS), cc = (cid + 0.5) * CS;
+    float h = hash3(cid), h2 = hash3(cid + 11.0), h3 = hash3(cid + 23.0);
+    float lead = 46.0 * smoothstep(TA, TB + 0.5, gT);   // from alongside on, the stairs start to go a little before it reaches them
+    float kk = clamp((gY - cc.y - 6.0 + lead - 18.0 * h) / 24.0, 0.0, 1.4), d;
+    if (kk <= 0.0) d = vbase(p);
+    else {
+      vec2 ou = cc.xz / max(length(cc.xz), 1.0);
+      vec3 off = vec3((ou.x * 5.0 + (h2 - 0.5) * 5.0) * kk, -(2.0 + 20.0 * h) * kk * kk, (ou.y * 5.0 + (h3 - 0.5) * 5.0) * kk);
+      vec3 lp = p - cc - off; lp.xz *= rot(kk * (h - 0.5) * 2.5); lp.xy *= rot(kk * (h2 - 0.5) * 2.0);
+      d = max(vbase(cc + lp), sdBox(lp, vec3(CS * 0.5 * (1.0 - 0.45 * kk))));
+      d += max(kk - 0.55, 0.0) * 8.0 * step(0.6, h);   // some are simply gone
+    }
+    d = max(d, 9.0 - length(p.xz));                                          // the well it goes up
+    return min(d, sdBox(p - vec3(0.0, -0.6, 0.0), vec3(8.0, 0.6, 8.0)));     // the landing it stands on
+  }
+  float gM;
+  float map(vec3 p){ float mid, dr = sdRocket(p - gRk, mid), ds = stairs(p); if (dr < ds){ gM = 10.0 + mid; return dr; } gM = 0.0; return ds; }
+  float flick(){ return 0.86 + 0.14 * sin(gT * 53.0) * sin(gT * 31.0 + 1.0) + 0.12 * (hash1(floor(gT * 30.0)) - 0.5); }
+  vec3 FL = vec3(1.0, 0.56, 0.26);
+  vec3 fLight(vec3 p){ vec3 L = gRk + vec3(0.0, -1.3, 0.0) - p; float d2 = dot(L, L); return FL * gIgn * flick() * 4.0 / (1.0 + d2 * 0.35); }
+  bool cyl(vec3 ro, vec3 rd, float R, float y0, float y1, out float t0, out float t1){
+    vec2 oc = ro.xz - gRk.xz, dz = rd.xz; float a = dot(dz, dz), b = dot(oc, dz), c = dot(oc, oc) - R * R;
+    t0 = -1e9; t1 = 1e9;
+    if (a < 1e-7){ if (c > 0.0) return false; }
+    else { float h = b * b - a * c; if (h < 0.0) return false; h = sqrt(h); t0 = (-b - h) / a; t1 = (-b + h) / a; }
+    if (abs(rd.y) > 1e-6){ float ta = (y0 - ro.y) / rd.y, tb = (y1 - ro.y) / rd.y; t0 = max(t0, min(ta, tb)); t1 = min(t1, max(ta, tb)); }
+    else if (ro.y < y0 || ro.y > y1) return false;
+    return t1 > t0;
+  }
+  // smoke: rolling out over the landing from under it, and a trail left up the well behind it
+  float smokeD(vec3 p){
+    vec3 q = p - vec3(gRk.x, 0.0, gRk.z); float rad = length(q.xz), age = max(gT - 0.35, 0.0);
+    float sp = 1.5 + 8.0 * (1.0 - exp(-age * 0.8));
+    float pad = smoothstep(sp, sp - 3.5, rad) * smoothstep(0.8 + 1.8 * smoothstep(0.0, 3.0, age), 0.0, q.y) * smoothstep(-0.1, 0.3, q.y);
+    float tr = min(1.1 + 0.4 * sqrt(max(gY - q.y, 0.0)), 7.0);
+    float trail = smoothstep(tr, tr * 0.25, rad) * step(0.4, q.y) * step(q.y, gY - 0.3) * 0.6 * exp(-max(gY - q.y, 0.0) / 150.0);
+    float m = max(pad, trail); if (m < 0.002) return 0.0;
+    vec3 fl = q * 0.42 + vec3(0.0, -gT * 0.7, 0.0) - vec3(q.x, 0.0, q.z) / max(rad, 0.5) * age * 0.9;
+    return m * smoothstep(0.38, 0.75, fbm(fl) + 0.15 * m) * gIgn * 0.55;
+  }
+  vec4 smoke(vec3 ro, vec3 rd, float tmax){
+    float t0, t1; if (!cyl(ro, rd, 13.0, -0.2, max(gY, 5.0), t0, t1)) return vec4(0.0, 0.0, 0.0, 1.0);
+    t0 = max(t0, 0.0); t1 = min(t1, tmax); if (t1 <= t0) return vec4(0.0, 0.0, 0.0, 1.0);
+    float dt = (t1 - t0) / 36.0, t = t0 + dt * hash1(dot(gl_FragCoord.xy, vec2(12.9898, 78.233)) + gT), tr = 1.0; vec3 acc = vec3(0.0);
+    for (int i = 0; i < 36; i++){
+      vec3 p = ro + rd * t; float d = smokeD(p);
+      if (d > 0.002){ float a = 1.0 - exp(-d * dt * 0.8); acc += tr * a * (vec3(0.025) + fLight(p) * 0.28); tr *= 1.0 - a; if (tr < 0.02) break; }
+      t += dt;
+    }
+    return vec4(acc, tr);
+  }
+  // the fire: a white core, yellow, then orange going ragged and thin
+  vec3 flame(vec3 ro, vec3 rd, float tmax){
+    if (gIgn <= 0.0) return vec3(0.0);
+    float L = mix(0.8, 6.0, gIgn) + 9.0 * smoothstep(2.0, 7.0, gT);
+    float t0, t1; if (!cyl(ro, rd, 2.0, gY - L, gY + 0.1, t0, t1)) return vec3(0.0);
+    t0 = max(t0, 0.0); t1 = min(t1, tmax); if (t1 <= t0) return vec3(0.0);
+    float dt = (t1 - t0) / 28.0, t = t0 + dt * hash1(dot(gl_FragCoord.xy, vec2(7.13, 3.71)) + gT * 3.0); vec3 e = vec3(0.0);
+    for (int i = 0; i < 28; i++){
+      vec3 q = ro + rd * t - gRk; float u = clamp(-q.y / L, 0.0, 1.0), rad = length(q.xz), R = 0.8 + 0.65 * u;
+      float nz = noise3(vec3(q.x * 1.7, q.y * 0.9 + gT * 38.0, q.z * 1.7));
+      float dens = exp(-pow(rad / R, 2.0) * (2.2 + 2.0 * nz)) * pow(1.0 - u, 1.4) * (0.45 + 0.9 * nz);
+      float core = exp(-pow(rad / (R * 0.42), 2.0) * 3.0) * pow(1.0 - u, 3.0);
+      e += (mix(vec3(1.0, 0.40, 0.09), vec3(1.0, 0.76, 0.36), 1.0 - u) * dens * 2.3 + vec3(1.0, 0.95, 0.86) * core * 5.0) * dt;
+      t += dt;
+    }
+    return e * gIgn * flick();
+  }
+  vec3 render(vec2 uv, float t){
+    gT = t; gY = rkY(t);
+    const float HC = 420.0;   // shot 3: the camera's height up the well; the rocket comes up from 170 m below it to the lens
+    if (t >= TB){ float u = clamp((t - TB) / (TC - 0.15 - TB), 0.0, 1.0); gY = HC - 7.2 - 2.0 - 170.0 * (1.0 - pow(u, 1.7)); }
+    gIgn = smoothstep(0.30, 1.30, t) * mix(step(0.4, hash1(floor(t * 22.0))), 1.0, smoothstep(0.55, 1.0, t));   // it splutters, then catches
+    float shk = gIgn * (t < TA ? 0.05 * (1.0 - smoothstep(1.8, 2.6, t)) : 0.0);
+    gRk = vec3((noise3(vec3(t * 23.0, 1.0, 0.0)) - 0.5) * shk, gY, (noise3(vec3(t * 23.0, 7.0, 0.0)) - 0.5) * shk);
+    vec3 ro, ta, up = vec3(0.0, 1.0, 0.0); float fl, roll = 0.0;
+    if (t < TA){          // 1: by its foot, low, looking up a little
+      float s = t / TA; ro = vec3(-6.4, 0.9, -7.2) + vec3(0.5, 0.1, 0.5) * s; ta = vec3(gRk.x, 0.6 + gY * 0.9, gRk.z); fl = 1.6;
+    } else if (t < TB){   // 2: alongside, climbing with it
+      float s = t - TA, a = -1.95 + 0.10 * s; ro = gRk + vec3(cos(a) * 8.6, 1.3 + 0.25 * s, sin(a) * 8.6); ta = gRk + vec3(0.0, 3.6, 0.0); fl = 1.15; roll = 0.05 * sin(s * 1.2 + 0.4);
+    } else {              // 3: high up the well, looking straight down it
+      ro = vec3(3.0, HC, 2.3); ta = vec3(0.7, HC - 60.0, 0.5); up = vec3(0.0, 0.0, 1.0); fl = 1.25;
+    }
+    vec3 cw = normalize(ta - ro), cu = normalize(cross(cw, up)), cv = cross(cu, cw);
+    uv = rot(roll) * uv;
+    vec3 rd = normalize(uv.x * cu + uv.y * cv + fl * cw);
+    float tt = 0.05; bool hit = false;
+    for (int i = 0; i < 120; i++){ float d = map(ro + rd * tt); if (d < 0.0012 * tt){ hit = true; break; } tt += clamp(d * 0.75, 0.01, 7.0); if (tt > 900.0) break; }
+    vec3 fogc = vec3(0.004), col = fogc;
+    if (hit){
+      vec3 p = ro + rd * tt; float m = gM; vec2 e = vec2(0.002 + 0.001 * tt, 0.0);
+      vec3 n = normalize(vec3(map(p + e.xyy) - map(p - e.xyy), map(p + e.yxy) - map(p - e.yxy), map(p + e.yyx) - map(p - e.yyx)));
+      vec3 L = normalize(gRk + vec3(0.0, -1.3, 0.0) - p), V = -rd;
+      vec3 amb = vec3(0.05) * (0.4 + 0.6 * max(dot(n, normalize(vec3(0.3, 0.9, 0.2))), 0.0));
+      vec3 lit = amb + fLight(p) * max(dot(n, L), 0.0);
+      if (m < 5.0){
+        col = vec3(0.46) * (0.85 + 0.25 * noise3(p * 0.7)) * lit;
+      } else {
+        float mid = m - 10.0; vec3 lp = p - gRk;
+        vec3 alb = mid == 1.0 ? vec3(0.82, 0.27, 0.16) : (mid == 2.0 ? vec3(0.86, 0.80, 0.68) : (mid == 3.0 ? vec3(0.86, 0.38, 0.10) : vec3(0.93, 0.90, 0.82)));
+        float wd = length(vec2(lp.x, lp.y - 3.9));
+        if (lp.z < -0.6 && wd < 0.66){ alb = wd < 0.5 ? vec3(0.20, 0.30, 0.32) : vec3(0.88, 0.72, 0.10); }
+        float sp = pow(max(dot(reflect(-L, n), V), 0.0), 24.0) * 0.35;
+        col = alb * (lit + vec3(0.035) * max(dot(n, V), 0.0)) + (FL * gIgn * 0.4 + vec3(0.03)) * sp;   // and a little light from where we stand, so it never goes black
+      }
+      col = mix(fogc, col, exp(-tt * (t < TB ? 0.012 : 0.0055)));
+    }
+    // the glow of the fire in the air round it
+    { vec3 Lp = gRk + vec3(0.0, -1.5, 0.0); float tc = clamp(dot(Lp - ro, rd), 0.0, tt); float dd = length(ro + rd * tc - Lp);
+      col += FL * gIgn * flick() * 0.16 / (1.0 + dd * dd * 0.45) * exp(-tc * 0.002); }
+    vec4 sm = smoke(ro, rd, tt); col = col * sm.a + sm.rgb;
+    col += flame(ro, rd, tt) * (0.35 + 0.65 * sm.a) * exp(-tt * 0.0015);
+    return col;
+  }
+  void main(){
+    vec2 fc = gl_FragCoord.xy, uv = (fc - 0.5 * uRes) / uRes.y;
+    float T = uT;
+    // the camera shakes with the burn: hard close to it, a tremor alongside, and up the well more and more as it comes at you
+    float sk = T < TA ? smoothstep(0.3, 1.2, T) * 0.010 : (T < TB ? 0.004 : 0.0015 + 0.014 * smoothstep(TC - 1.3, TC, T));
+    uv += (vec2(hash1(floor(T * 40.0)), hash1(floor(T * 40.0) + 7.0)) - 0.5) * sk;
+    vec3 col = render(uv, T);
+    if (T >= TA && T < TB) col = 0.5 * (col + render(uv, T - 0.022));   // a little shutter: the stairs smear past, the rocket stays sharp
+    // a print of it: wide, darker at the corners, grain
+    float bar = 0.5 * min(1.0, uRes.x / uRes.y / 2.35);
+    col *= 1.0 - smoothstep(0.35, 1.1, length(uv)) * 0.55;
+    col *= smoothstep(0.0, 0.25, T);
+    col = mix(col, vec3(1.0, 0.96, 0.9), smoothstep(TC - 0.35, TC - 0.05, T));   // it is on you: white
+    col = col / (1.0 + col * 0.35);
+    col += (hash1(dot(fc, vec2(12.9898, 78.233)) + fract(T * 7.31) * 61.0) - 0.5) * 0.02;
+    col *= step(abs(uv.y), bar);
+    o = vec4(pow(max(col, 0.0), vec3(1.0 / 2.2)), 1.0);
+  }`;
+
+  window.__rk = { RK, launch, FLY, EXT, T_PRE };   // a handle for testing from the console
 })();
