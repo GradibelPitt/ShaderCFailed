@@ -251,6 +251,7 @@ export function buildRiverHall(ctx) {
     for (const zz of [a, b]) add(box(Math.min(x0, x1), 0, zz - 0.01, Math.max(x0, x1), NSPR, zz + 0.01), mat(0), true);
     const nv = new THREE.CylinderGeometry(NR, NR, dx, 32, 1, true, 0, Math.PI); nv.rotateZ(Math.PI / 2); nv.translate(xm, NSPR, n.zc); add(nv, mat(0));
     const bk = new THREE.Shape(); bk.moveTo(a, 0); bk.lineTo(b, 0); bk.lineTo(b, NSPR); bk.absarc(n.zc, NSPR, NR, 0, Math.PI, false); bk.closePath();
+    if (side === 1) { const h = new THREE.Path(); h.moveTo(n.zc - 0.5, 0.45); h.lineTo(n.zc - 0.5, 2.52); h.lineTo(n.zc + 0.5, 2.52); h.lineTo(n.zc + 0.5, 0.45); h.closePath(); bk.holes.push(h); }   // the white door's opening
     add(shapeGeo(bk, (u, v) => [x1, v, u], 24), mat(0), true);
     for (let k = 0; k < 3; k++) { const xa = side * (HWALL + 0.35 * k); add(box(Math.min(xa, x1), 0, a, Math.max(xa, x1), 0.15 * (k + 1), b), mat(1), true); }
     n.floor = 0.45; n.x0 = x0; n.x1 = x1;
@@ -286,10 +287,26 @@ export function buildRiverHall(ctx) {
     const dot = new THREE.CircleGeometry(0.06, 20); dot.translate(0, 2.25, LEN + RA.d - 0.01); add(dot, mat(8, { key: 'reddot', base: [6, 0.6, 0.4] }));
     const lampG = new THREE.CircleGeometry(0.2, 24); lampG.rotateX(Math.PI / 2); lampG.translate(0, RA.spr + RA.hw - 0.04, LEN + 1.6); add(lampG, mat(8, { key: 'redlamp', base: [5, 1.1, 0.8] }));
   }
-  { // the white door at the back of the right-hand bay, shut
-    const n = NICHES[1], x = n.x1 - 0.035;
-    add(box(x - 0.03, n.floor, n.zc - 0.48, x + 0.03, n.floor + 2.05, n.zc + 0.48), mat(9), true);
-    add(box(x - 0.08, n.floor + 0.98, n.zc + 0.3, x - 0.03, n.floor + 1.02, n.zc + 0.4), mat(6, { key: 'chrome', base: [0.5, 0.5, 0.48] }));
+  // The white door at the back of the right-hand bay. E opens it (it stays open: SCF_SAVE riverDoor). Behind it a plain corridor runs on,
+  // darker and darker; some way down it, in the dark, it is the corridor behind the exit door at the top of the cinema's hall (js/store.js),
+  // and you walk out of that one toward the hall. (DC: the corridor, in this hall's own coordinates; w is how far in from the door.)
+  const DC = { x: NICHES[1].x1, z0: NICHES[1].zc - 0.5, z1: NICHES[1].zc + 0.5, zc: NICHES[1].zc, y: NICHES[1].floor, L: 9, W0: 8 };
+  const door = { open: !!(window.SCF_SAVE && window.SCF_SAVE.get('riverDoor')), t: 0, pivot: null };
+  door.t = door.open ? 1 : 0;
+  {
+    const x = DC.x - 0.035, chrome = mat(6, { key: 'chrome', base: [0.5, 0.5, 0.48] });
+    door.pivot = new THREE.Group(); door.pivot.position.set(x, DC.y, DC.z0 + 0.02); group.add(door.pivot);
+    const leaf = new THREE.Mesh(box(-0.03, 0, 0, 0.03, 2.05, 0.96), mat(9)); door.pivot.add(leaf);
+    for (const s of [-1, 1]) door.pivot.add(new THREE.Mesh(box(s < 0 ? -0.08 : 0.03, 0.98, 0.78, s < 0 ? -0.03 : 0.08, 1.02, 0.88), chrome));
+    door.pivot.rotation.y = door.t * 1.5;
+    for (const z of [DC.z0 - 0.06, DC.z1]) add(box(x - 0.05, DC.y, z, x + 0.035, DC.y + 2.58, z + 0.06), mat(9));   // the frame
+    add(box(x - 0.05, DC.y + 2.52, DC.z0 - 0.06, x + 0.035, DC.y + 2.58, DC.z1 + 0.06), mat(9));
+    // the corridor: the same terrazzo, low, one weak light just inside the door and nothing after it
+    const X1 = DC.x + DC.L;
+    add(box(DC.x, DC.y - 0.15, DC.z0, X1, DC.y, DC.z1), mat(1), true);
+    add(box(DC.x, DC.y, DC.z0 - 0.1, X1, DC.y + 2.62, DC.z0), mat(0), true); add(box(DC.x, DC.y, DC.z1, X1, DC.y + 2.62, DC.z1 + 0.1), mat(0), true);
+    add(box(DC.x, DC.y + 2.52, DC.z0 - 0.1, X1, DC.y + 2.62, DC.z1 + 0.1), mat(0), true); add(box(X1, DC.y - 0.15, DC.z0 - 0.1, X1 + 0.1, DC.y + 2.62, DC.z1 + 0.1), mat(0), true);
+    light(DC.x + 1.4, DC.y + 2.3, DC.zc, [0.55, 0.6, 0.48], 4.5);
   }
 
   /* ---------------- lamps ---------------- */
@@ -383,6 +400,7 @@ export function buildRiverHall(ctx) {
     palm(x, n.floor, n.zc, 2.3, 0.6, -0.3); boulder(x + 0.3, n.floor, n.zc + 0.8, 0.4); boulder(x - 0.1, n.floor, n.zc - 0.9, 0.33); bush(x + 0.2, n.floor, n.zc + 0.2, 1.0); groundLamp(x + 0.75, n.floor, n.zc - 0.3); }
 
   /* ---------------- the slide ---------------- */
+  let rideCurve = null;
   {
     const curve = new THREE.CatmullRomCurve3([new V3(2.6, 5.35, -1.2), new V3(2.6, 5.35, 0.3), new V3(2.95, 5.0, 2.8), new V3(2.7, 4.1, 5.6), new V3(1.8, 2.7, 8.2), new V3(cxf(10.4) + 0.5, 1.35, 10.4), new V3(cxf(12) + 0.15, 0.32, 12.1)]);
     const TS = 180, RS = 22, g = new THREE.TubeGeometry(curve, TS, 0.45, RS, false), nrm = g.attributes.normal, col = new Float32Array(nrm.count * 3);
@@ -394,6 +412,8 @@ export function buildRiverHall(ctx) {
     }
     g.setAttribute('vcol', new THREE.BufferAttribute(col, 3));
     add(g, mat(6, { key: 'slide', base: [-1, 0, 0] }), new THREE.TubeGeometry(curve, 50, 0.45, 8, false));
+    // the line someone riding it follows, low in the tube (in the world's coordinates): from deep in the wall down to the water
+    rideCurve = new THREE.CatmullRomCurve3(curve.points.map((q) => new V3(q.x, q.y - 0.36, q.z).add(O))); rideCurve.arcLengthDivisions = 400;
   }
 
   /* ---------------- rings on the water ---------------- */
@@ -456,7 +476,9 @@ export function buildRiverHall(ctx) {
   const loc = (x, z) => [x - O.x, z - O.z];
   const inLowShaft = (x, y, z) => Math.abs(x - lowBase.x) < SHS && Math.abs(z - lowBase.z) < SHS && y > lowBase.y - 0.35 && y < lowBase.y + SL;
   const inUpShaft = (x, y, z) => Math.abs(x - upBase.x) < SHS && Math.abs(z - upBase.z) < SHS && y > upBase.y - 0.1 && y < upBase.y + SL + 0.05;
-  const inZone = (x, y, z) => { const [lx, lz] = loc(x, z); return y > upBase.y - 0.5 && y < O.y + 12 && lx > -NDEEP - 0.5 && lx < NDEEP + 0.5 && lz > -1 && lz < LEN + RA.d + 1; };
+  const inCorr = (lx, ly, lz) => lx > DC.x - 0.05 && lx < DC.x + DC.L + 0.2 && lz > DC.z0 - 0.2 && lz < DC.z1 + 0.2 && ly > DC.y - 0.5 && ly < DC.y + 3;
+  const inZone = (x, y, z) => { const [lx, lz] = loc(x, z); return (y > upBase.y - 0.5 && y < O.y + 12 && lx > -NDEEP - 0.5 && lx < NDEEP + 0.5 && lz > -1.7 && lz < LEN + RA.d + 1) || inCorr(lx, y - O.y, lz); };
+  const doorAt = new V3(DC.x - 0.04, DC.y + 1.1, DC.zc).add(O), _dd = new V3();
   let amb = null, zk = 0;
   return {
     O, group, spawn: { pos: new V3(-1.7, 0.05, 1.8).add(O), yaw: Math.PI + 0.2 },
@@ -480,7 +502,23 @@ export function buildRiverHall(ctx) {
       return null;
     },
     get k() { return zk; },
+    slideCurve: rideCurve,   // the striped slide, to ride (js/playroom.js: from the slide holes of the mirror room)
+    // the white door and the corridor behind it
+    CORR: { W0: DC.W0, half: (DC.z1 - DC.z0) / 2, yawIn: -Math.PI / 2 },
+    get doorOpen() { return door.open; },
+    openDoor(quiet) { if (door.open) return; door.open = true; if (quiet) door.t = 1; if (window.SCF_SAVE) window.SCF_SAVE.set('riverDoor', true); },
+    doorAt,
+    doorNear(cam, dir) { if (door.open) return false; _dd.copy(doorAt).sub(cam); const d = _dd.length(); return d < 1.6 && (d < 0.5 || _dd.dot(dir) / d > 0.6); },
+    blockDoor(p, r) {   // the shut door is in the way
+      if (door.t > 0.85) return; const lx = p.x - O.x, ly = p.y - O.y, lz = p.z - O.z;
+      if (lz > DC.z0 - r && lz < DC.z1 + r && ly > DC.y - 0.3 && ly < DC.y + 2.5 && lx > DC.x - 0.07 - r && lx < DC.x + 0.3) p.x = O.x + DC.x - 0.07 - r;
+    },
+    corrW(p) { const lx = p.x - O.x, ly = p.y - O.y, lz = p.z - O.z; return lx > DC.x && lx < DC.x + DC.L + 0.2 && lz > DC.z0 - 0.05 && lz < DC.z1 + 0.05 && ly > DC.y - 0.4 && ly < DC.y + 2.6 ? lx - DC.x : -1; },
+    corrU(p) { return p.z - O.z - DC.zc; },
+    corrPoint(w, u, y) { return new V3(DC.x + w, DC.y + y, DC.zc + u).add(O); },
+    corrFloor: O.y + DC.y,
     update(dt, cam, under, AC) {
+      if (door.open && door.t < 1) { door.t = Math.min(1, door.t + dt / 0.9); const e = 1 - Math.pow(1 - door.t, 3); door.pivot.rotation.y = 1.5 * e; }
       const here = inZone(cam.x, cam.y, cam.z);
       group.visible = here;
       zk += ((here ? 1 : 0) - zk) * Math.min(1, dt * 2.5);

@@ -1612,7 +1612,15 @@ window.__poolStart = (held) => {
   requestAnimationFrame(frame);
   // from the level-select hall (js/hub.js): straight on through the hole that leads there
   if (window.__poolWarpTo) { const go = window.__poolWarpTo; window.__poolWarpTo = null; warpTo(go === 'store' ? STORE_HOLE : BOUNCE_HOLE); }
+  // walked back out of the store on a page that has no pool (the playroom's, reached from the river hall through the cinema): here, just
+  // inside the store's tunnel, walking out of it into the pool
+  if (window.__poolWarpOut) { const go = window.__poolWarpOut; window.__poolWarpOut = null; warpOut(go === 'store' ? STORE_HOLE : BOUNCE_HOLE); }
 };
+function warpOut(k) {
+  const a = TUNF[k], s = Math.max(0.25, HAND_IN - 0.3);
+  player.mode = 'walk'; player.mantle = null; player.swim = false; player.crouch = false; blink = null; fade = 0; intro = 1;
+  player.pos.set(a.mx + a.ix * s, TUN_FLOOR_F + 0.005, a.mz + a.iz * s); player.vel.set(0, 0, 0); player.yaw = a.yawIn + Math.PI; player.pitch = 0;
+}
 function warpTo(k) {
   const a = TUNF[k], S = sceneOf(k); if (!S || !S.ready() || S.failed()) return;
   player.mode = 'walk'; player.mantle = null; player.swim = false; player.crouch = false; blink = null;

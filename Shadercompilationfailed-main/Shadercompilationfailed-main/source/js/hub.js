@@ -15,7 +15,7 @@ const LADDER_MID=0;         // "the very middle of the ladder", in metres above 
 // The ones after join the screen once this save has been to that place (each place adds itself to SCF_SAVE visited when you get there).
 // A new place: add a line to HUB_LATER, mark it visited when it starts, and give hubGo a way there.
 const HUB_BASE=[{label:'POOL',go:'pool'},{label:'CHECKERED ROOM',go:'room'},{label:'LADDER',go:'ladder'}];
-const HUB_LATER=[{label:'BOUNCE HOUSE',go:'bounce'},{label:'STORE',go:'store'},{label:'RIVER',go:'river'},{label:'MOON STATION',go:'moon'}];
+const HUB_LATER=[{label:'BOUNCE HOUSE',go:'bounce'},{label:'STORE',go:'store'},{label:'RIVER',go:'river'},{label:'MOON STATION',go:'moon'},{label:'MIRROR POOL',go:'mirror'}];
 const ROW_U0=0.07,ROW_U1=0.93;
 let HUB_ROWS=[],ROW_H=0.20;
 // where each line is drawn (as a fraction of the screen's height, from the top): three lines sit where they always have; more lines close up
@@ -350,6 +350,7 @@ function hubGo(i){
   if(go==='pool'){location.href='playroom.html';return;} // the playroom and its pool are a page of their own
   if(go==='moon'){location.href='moonstation.html';return;} // the Moon's station, a page of its own
   if(go==='river'){location.href='playroom.html#river';return;} // the river hall up the shaft over the size gun is built into the playroom's page
+  if(go==='mirror'){location.href='playroom.html#mirror';return;} // the PS2 reflection behind the glass at the end of the playroom's low pink tube, built into the playroom's page
   // both of the others are in the first chamber, on this same page
   Snd.mute=false;if(Snd.ctx){Snd.master.gain.setTargetAtTime(0.9,Snd.ctx.currentTime,0.5);Snd.pad.gain.setTargetAtTime(0.05,Snd.ctx.currentTime,0.5);}
   G.shock=0;G.fovAdd=0;G.fall=0;G.told=false;loadLevel(0);G.fade=1;G.mode='play';
@@ -366,6 +367,13 @@ function hubWarp(go){
     window.__poolWarpTo=go;poolHandOver();
   };
   poolPreload();hold();
+}
+// level1.html#store-exit: out of the store's back corridor on a page without the pool (js/store.js, reached from the river hall through the
+// cinema). Down the ladder into the inverted pool, and out of the store's tunnel into it, walking away from the store.
+function storeExitWarp(){
+  G.shock=0;G.fovAdd=0;G.fall=0;G.told=false;loadLevel(0);G.fade=1;G.mode='play';toLadder(LADDER_MID);
+  const hold=()=>{if(G.mode!=='play')return;if(!window.__poolReady){G.fade=1;requestAnimationFrame(hold);return;}window.__poolWarpOut='store';poolHandOver();};
+  hold();
 }
 function tickHub(dt){
   if(HB.title>=0){HB.title+=dt;if(HB.title>=TTL_END){ttlOff();SCF_SAVE.set('titleSeen',true);}else ttlDraw(HB.title);}

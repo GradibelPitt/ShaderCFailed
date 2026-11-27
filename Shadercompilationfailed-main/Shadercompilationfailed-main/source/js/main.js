@@ -12,6 +12,7 @@ function boot(data){
   else if(saved?data.hb:st==='hub')enterHub();else if((data&&data.vd)||(!saved&&st==='2'))enterVoid();
   try{canvas.focus({preventScroll:true});}catch(e){}
   requestAnimationFrame(frame);
+  if(location.hash==='#store-exit'&&typeof storeExitWarp==='function'){try{history.replaceState(null,'',location.pathname);}catch(e){}storeExitWarp();} // out of the store, from the playroom's page
   const hot=window.claude&&window.claude.hot;
   if(hot&&hot.snapshot)hot.snapshot(()=>Object.assign({v:3,vd:G.mode==='void',hb:G.mode==='hub'},snapshotMaze()));
 }

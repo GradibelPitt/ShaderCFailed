@@ -9,6 +9,8 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { MeshBVH } from 'three-mesh-bvh';
 import { buildRiverHall } from './riverhall.js';
+import { buildMirror } from './ps2mirror.js';
+let MIR = null;   // the mirror pool behind the glass at the end of the low pink tube (js/ps2mirror.js), made once the room is built
 
 /* ------------------------------------------------------------------ */
 /* constants                                                           */
@@ -695,6 +697,45 @@ let lifebuoy;
 })();
 
 /* ------------------------------------------------------------------ */
+/* the far corner: a white sun lounger, and alphabet blocks           */
+/* ------------------------------------------------------------------ */
+// On the deck in the far left corner, past the deep end and away from the slides: a white plastic sun lounger, its back toward the wall
+// (E sits you down on it, E or a step gets you up), and around it alphabet blocks, some stacked into little staircases like the ones in the
+// checkerboard rooms. Crouch against one of those and your size changes, as it does there. Nothing says so.
+const LOUNGER = { x: -5.55, z0: 22.6, z1: 24.5, seatY: 0.34, seatZ: 23.2 };
+const ABC_STAIRS = [];   // { x, z, r }: where the little staircases stand (for the crouch)
+{
+  const L = LOUNGER, W = 0.66, white = std({ color: 0xf2f2ee, roughness: 0.35 }), x0 = L.x - W / 2, x1 = L.x + W / 2, zh = 23.85;
+  for (const x of [x0 + 0.04, x1 - 0.04]) { add(new THREE.BoxGeometry(0.04, 0.05, zh - L.z0), white, x, L.seatY - 0.03, (L.z0 + zh) / 2); for (const z of [L.z0 + 0.06, zh - 0.05]) add(new THREE.BoxGeometry(0.05, L.seatY - 0.04, 0.05), white, x, (L.seatY - 0.04) / 2, z); }   // rails and legs
+  for (let z = L.z0 + 0.04; z < zh - 0.02; z += 0.085) add(new THREE.BoxGeometry(W - 0.06, 0.018, 0.062), white, L.x, L.seatY, z + 0.031, { col: false });   // the seat's slats
+  { const back = new THREE.Group(); back.position.set(L.x, L.seatY, zh); back.rotation.x = -0.9; scene.add(back);   // the back, raised
+    for (let d = 0.03; d < 0.78; d += 0.085) add(new THREE.BoxGeometry(W - 0.06, 0.018, 0.062), white, 0, 0, d + 0.031, { parent: back, col: false });
+    for (const sx of [-1, 1]) add(new THREE.BoxGeometry(0.04, 0.04, 0.8), white, sx * (W / 2 - 0.04), -0.02, 0.4, { parent: back, col: false });
+    add(new THREE.BoxGeometry(W, 0.02, 0.8), white, 0, -0.012, 0.4, { parent: back, cast: false, col: true }).visible = false;   // (its collider)
+    for (const sx of [-1, 1]) add(new THREE.BoxGeometry(0.04, 0.42, 0.04), white, L.x + sx * (W / 2 - 0.06), 0.2, 24.25, { rx: 0.35 }); }   // the prop under it
+  add(new THREE.BoxGeometry(W, L.seatY + 0.01, zh - L.z0), white, L.x, (L.seatY + 0.01) / 2, (L.z0 + zh) / 2, { cast: false, col: true }).visible = false;   // the seat, solid
+  // a folded towel at the foot
+  add(new RoundedBoxGeometry(0.4, 0.05, 0.26, 3, 0.02), std({ color: 0x6fc8d8, roughness: 0.9 }), L.x + 0.04, L.seatY + 0.035, L.z0 + 0.25, { ry: 0.12, col: false });
+  // the alphabet blocks: one letter on every face, a colour each
+  const B = 0.1, cols = ['#e2453a', '#f1b62e', '#3f8fd8', '#4bb06a', '#e07a2e', '#9a5ac8'], letters = 'ABCDEF';
+  const blockMat = letters.split('').map((ch, i) => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
+    g.fillStyle = cols[i]; g.fillRect(0, 0, 64, 64); g.strokeStyle = 'rgba(255,255,255,0.85)'; g.lineWidth = 4; g.strokeRect(5, 5, 54, 54);
+    g.fillStyle = '#fffaf0'; g.font = 'bold 44px "Trebuchet MS", Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(ch, 32, 35);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return std({ map: t, roughness: 0.55 }); });
+  const blockG = new RoundedBoxGeometry(B, B, B, 2, 0.008);
+  let n = 0; const pickM = () => blockMat[(n++ * 5 + 3) % 6];
+  const stair = (x, z, ry) => {   // three columns, one, two and three blocks high, one behind the other
+    const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = ry; scene.add(g);
+    for (let i = 0; i < 3; i++) { for (let j = 0; j <= i; j++) add(blockG, pickM(), (i - 1) * B, B / 2 + j * B, 0, { parent: g, col: false });
+      add(new THREE.BoxGeometry(B, (i + 1) * B, B), blockMat[0], (i - 1) * B, (i + 1) * B / 2, 0, { parent: g, cast: false, col: true }).visible = false; }
+    ABC_STAIRS.push({ x, z, r: 0.17 });
+  };
+  stair(-6.45, 22.75, 0.5); stair(-4.75, 24.35, -2.3);
+  for (const [x, y, z, rx, ry, rz] of [[-6.1, B / 2, 23.5, 0, 0.6, 0], [-6.25, B / 2, 23.62, 0, 1.3, 0], [-6.18, B * 1.5, 23.56, 0, 0.2, 0], [-4.9, B / 2, 22.85, 0, 0.9, 0], [-4.62, B * 0.62, 23.25, 0.5, 0.3, 0.9], [-6.7, B / 2, 24.2, 0, 2.1, 0], [-5.2, B / 2, 22.35, 0, 0.35, 0]])
+    add(blockG, pickM(), x, y, z, { rx, ry, rz, col: new THREE.BoxGeometry(B, B, B) });
+}
+
+/* ------------------------------------------------------------------ */
 /* behind the round grate: the pipe, the flooded maze, the size gun   */
 /* ------------------------------------------------------------------ */
 const gun = { x: 0, y: 0, z: 0, group: null, got: !!SAVE.get('gun') };
@@ -1061,7 +1102,7 @@ function updateRide(dt) {
 function stepPlayer(dt) {
   const p = player.pos, v = player.vel;
   const sy = Math.sin(player.yaw), cy = Math.cos(player.yaw);
-  let fw = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0), st = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
+  let fw = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0), st = ((keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0)) * (MIR ? MIR.sx : 1);   // in the mirror, left and right swap
   const il = Math.hypot(fw, st); if (il > 1) { fw /= il; st /= il; }
   const sprint = keys.ShiftLeft || keys.ShiftRight;
   const wtop = waterAt(p.x, p.y, p.z), depth = wtop === null ? -1 : wtop - p.y;
@@ -1127,6 +1168,37 @@ function stepPlayer(dt) {
   }
   if (p.y < -9) { p.set(-4.75, 0.3, 7.75); v.set(0, 0, 0); }
 }
+// In the mirror (js/ps2mirror.js), the slide holes do not lead round to each other: step into either and it is dark for a moment, and then you
+// are at the top of the river hall's striped slide, deep in its wall, and going down it, all the way, into the river.
+const RSL = (() => { const curve = RH.slideCurve; return curve ? { curve, L: curve.getLength(), samples: [], rideStart: 0 } : null; })();
+function mirrorSlide() {
+  if (!RSL || !MIR || !MIR.on || blink) return false;
+  const p = player.pos, k = tunnelOf(p.x, p.y, p.z); if (k < 0) return false;
+  const a = TUN[k], s = (p.x - a.mx) * a.ix + (p.z - a.mz) * a.iz; if (s < 0.3) return false;
+  player.vel.set(0, 0, 0); blink = { t: 0, phase: 0, sl: RSL, mirrorOut: true }; return true;
+}
+// the sun lounger: sit, and get up again
+const chairAt = new V3(LOUNGER.x, LOUNGER.seatY + 0.05, LOUNGER.seatZ);
+function chairNear() { if (player.mode !== 'walk' || player.swim) return false; camera.getWorldDirection(_cd); const c = camera.position, dx = chairAt.x - c.x, dy = chairAt.y - c.y, dz = chairAt.z - c.z, d = Math.hypot(dx, dy, dz); return d < 1.1 && (d < 0.45 || (dx * _cd.x + dy * _cd.y + dz * _cd.z) / d > 0.55); }
+function sitDown() {
+  player.mode = 'sit'; player.crouch = false; cToggledOn = false; player.vel.set(0, 0, 0); player.mantle = null;
+  player.pos.set(LOUNGER.x, LOUNGER.seatY + 0.012, LOUNGER.seatZ + 0.15); player.h = H_CROUCH * 1.2; player.yaw = 0; player.pitch = -0.05; epEl.style.display = 'none';
+}
+function standUp() { player.mode = 'walk'; player.pos.set(LOUNGER.x + 0.62, 0.005, LOUNGER.seatZ); player.vel.set(0, 0, 0); player.onGround = true; player.rideCool = 0.3; }
+// crouched against one of the alphabet staircases, pushing toward it: your size changes (as on the little stairs in the checkerboard rooms)
+let abcPush = 0, abcCool = 0;
+function abcStep(dt) {
+  abcCool = Math.max(0, abcCool - dt); if (abcCool > 0 || player.mode !== 'walk' || player.swim || !player.crouch || !player.onGround) { abcPush = 0; return; }
+  const p = player.pos, sy = Math.sin(player.yaw), cy = Math.cos(player.yaw), fw = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0), st = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
+  const tx = -sy * fw + cy * st, tz = -cy * fw - sy * st; let on = false;
+  for (const A of ABC_STAIRS) { const dx = A.x - p.x, dz = A.z - p.z, d = Math.hypot(dx, dz); if (d < A.r + PR + 0.1 && dx * tx + dz * tz > 0.02) { on = true; break; } }
+  if (!on) { abcPush = 0; return; }
+  abcPush += dt; if (abcPush < 0.18) return; abcPush = 0; abcCool = 1.6;
+  const to = !small, S = window.__sizeGunScene; if (!to && !S.can(false)) return;
+  S.apply(to); SAVE.set('small', to); if (window.SizeGun) window.SizeGun.refresh();
+  if (AC) try { const t = AC.currentTime, o = AC.createOscillator(), g = AC.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(to ? 660 : 330, t); o.frequency.exponentialRampToValueAtTime(to ? 1320 : 165, t + 0.25);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.06, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3); o.connect(g); g.connect(acOut); o.start(t); o.stop(t + 0.35); } catch (e) { /* sound is optional */ }
+}
 function portalPlayer() {
   const p = player.pos, k = tunnelOf(p.x, p.y, p.z); if (k < 0) return;
   const a = TUN[k], b = TUN[1 - k], s = (p.x - a.mx) * a.ix + (p.z - a.mz) * a.iz; if (s < PORTAL_D) return;
@@ -1141,7 +1213,7 @@ function updatePlayer(dt) {
   player.slip = Math.max(0, player.slip - dt); player.rideCool = Math.max(0, player.rideCool - dt);
   if (blink) {
     blink.t += dt / 0.2;
-    if (blink.phase === 0) { fade = Math.min(1, blink.t); if (blink.t >= 1) { const sl = blink.sl; sl.curve.getPointAt(sl.rideStart / sl.L, player.pos); startRide(sl, sl.rideStart, 1.6); player.yaw = ride.heading; player.pitch = -0.15; player.h = H_CROUCH; blink.phase = 1; blink.t = 0; } }
+    if (blink.phase === 0) { fade = Math.min(1, blink.t); if (blink.t >= 1) { const sl = blink.sl; if (blink.mirrorOut && MIR && MIR.on) MIR.exit(); sl.curve.getPointAt(sl.rideStart / sl.L, player.pos); startRide(sl, sl.rideStart, 1.6); player.yaw = ride.heading; player.pitch = -0.15; player.h = H_CROUCH; blink.phase = 1; blink.t = 0; } }
     else { fade = Math.max(0, 1 - blink.t); if (blink.t >= 1) { blink = null; fade = 0; } }
     if (blink && blink.phase === 0) return;
   }
@@ -1151,10 +1223,11 @@ function updatePlayer(dt) {
     if (m.t >= 1) { player.mantle = null; player.swim = false; player.vel.set(0, 0, 0); }
     return;
   }
-  if (player.mode === 'ride') updateRide(dt);
-  else { const n = 4; for (let i = 0; i < n; i++) { if (player.mode !== 'walk' || player.mantle) break; stepPlayer(dt / n); } if (player.mode === 'walk') { portalPlayer(); grateBlock(dt); grateAssist(dt); shaftAssist(dt); if (RH.warp(player.pos)) heldSnap = true; } }
+  if (player.mode === 'sit') { if (keys.KeyW || keys.KeyS || keys.KeyA || keys.KeyD || keys.Space) standUp(); }
+  else if (player.mode === 'ride') updateRide(dt);
+  else { const n = 4; for (let i = 0; i < n; i++) { if (player.mode !== 'walk' || player.mantle) break; stepPlayer(dt / n); } if (player.mode === 'walk' && !mirrorSlide()) { abcStep(dt); portalPlayer(); grateBlock(dt); grateAssist(dt); shaftAssist(dt); if (RH.warp(player.pos)) heldSnap = true; RH.blockDoor(player.pos, PR); riverPortal(); } }
   // crouch height
-  let target = player.crouch ? H_CROUCH : H_STAND;
+  let target = player.mode === 'sit' ? H_CROUCH * 1.2 : player.crouch ? H_CROUCH : H_STAND;   // (sitting on the lounger: low)
   if (target > player.h + 0.01 && player.mode === 'walk' && !player.swim && !canStand()) target = player.h;
   const dh = target - player.h, stepH = 2.4 * dt; player.h += clamp(dh, -stepH, stepH);
 }
@@ -1170,6 +1243,7 @@ function roomAt(y, k) {
 window.__pr = { player, RH, climbOut };   // a handle for testing from the console
 window.__sizeGunScene = {
   can(toSmall) {
+    if (awayStore) return !!window.__storeSize && window.__storeSize.can(toSmall);   // in the cinema, that scene has the say
     if (player.frozen || player.mode !== 'walk' || player.mantle || blink || CL) return false;
     if (toSmall) return true;
     const p = player.pos;
@@ -1180,7 +1254,7 @@ window.__sizeGunScene = {
     }
     p.x = x0; p.z = z0; return false;
   },
-  apply(toSmall) { small = toSmall; if (!toSmall && growY !== null) { player.pos.y = growY; player.pos.x = growXZ[0]; player.pos.z = growXZ[1]; } growY = null; },
+  apply(toSmall) { if (awayStore) { small = toSmall; window.__storeSize.apply(toSmall); return; } small = toSmall; if (!toSmall && growY !== null) { player.pos.y = growY; player.pos.x = growXZ[0]; player.pos.z = growXZ[1]; } growY = null; },
 };
 const BOOK = new V3(-5.32, 0.13, 5.25), bookEl = document.getElementById('book'), epEl = document.getElementById('ep'), _bp = new V3();
 function bookAim() { camera.getWorldDirection(_cd); const c = camera.position, dx = BOOK.x - c.x, dy = BOOK.y - c.y, dz = BOOK.z - c.z, d = Math.hypot(dx, dy, dz); return d < 1.5 && (dx * _cd.x + dy * _cd.y + dz * _cd.z) / d > 0.6; } let bookOpen = false;
@@ -1190,7 +1264,10 @@ function interact() {
   if (bookOpen) { setBook(false); return; }
   if (gunNear()) { takeGun(); return; }
   if (grateNear()) { openGrate(); return; }
+  if (RH.doorNear(camera.position, camera.getWorldDirection(_cd))) { openRiverDoor(); return; }
   if (held >= 0) { throwBall(); return; }
+  if (player.mode === 'sit') { standUp(); return; }
+  if (chairNear()) { sitDown(); return; }
   if (bookAim()) { setBook(true); return; }
   const b = pickBall(); if (b >= 0) { held = b; bsleep[b] = 0; return; }
   if (player.mode !== 'walk' || blink) return;
@@ -1791,6 +1868,7 @@ function collapseCamera(dt) {
 const locked = () => document.pointerLockElement === canvas;
 let dragging = false;
 addEventListener('keydown', (e) => {
+  if (awayStore) return;   // the cinema listens for itself
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.code)) e.preventDefault();
   if (e.repeat) return; keys[e.code] = true; initAudio(); startMusic();
   if (e.code === 'KeyM') musicPick.click();
@@ -1805,14 +1883,14 @@ addEventListener('keyup', (e) => {
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; dragging = false; });
 canvas.addEventListener('mousedown', (e) => {
   canvas.focus(); initAudio(); startMusic();
-  if (locked()) { if (e.button === 0) interact(); return; }
+  if (locked()) { if (e.button === 0) { if (awayStore) { if (window.__store) window.__store.interact(); } else interact(); } return; }
   dragging = true;
   try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (err) { /* stay in drag-look */ }
 });
 addEventListener('mouseup', () => { dragging = false; });
 addEventListener('mousemove', (e) => {
-  if (!locked() && !dragging) return;
-  const sk = 0.0022 * (window.SCF_SETTINGS ? window.SCF_SETTINGS.get('sens') : 1); player.yaw -= (e.movementX || 0) * sk; player.pitch = clamp(player.pitch - (e.movementY || 0) * sk, -1.5, 1.5);   // Settings in the G book
+  if (awayStore || (!locked() && !dragging)) return;
+  const sk = 0.0022 * (window.SCF_SETTINGS ? window.SCF_SETTINGS.get('sens') : 1); player.yaw -= (e.movementX || 0) * sk * (MIR ? MIR.sx : 1); player.pitch = clamp(player.pitch - (e.movementY || 0) * sk, -1.5, 1.5);   // Settings in the G book
 });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
@@ -1884,6 +1962,22 @@ placeCamera(0);
   for (const p of panels) p.visible = true;
   scene.remove(cubeCam);
 }
+// the mirror pool: the glass at the end of the low pink tube, in the right-hand frame by the back wall
+MIR = buildMirror({ renderer, scene, camera, a: 4.195, disc: [4.195, 0.62, -2.0], skip: [causticMat], waters: [waterTop, waterUnder], glass: M.glass,
+  pool: { x0: -PX, x1: PX, z0: PZ0, z1: PZ1, y0: PBOT, y1: WATER_Y } });
+// Back up to the glass and keep backing into it (S, facing away): the slime gathers in from the edges, more the longer you keep at it, and when
+// it has closed over the screen you are through. In or out, the same way. Your body stays in the real room: going through reflects it in the glass.
+function mirrorStep(dt) {
+  if (MIR.on && (CL || leaving || RH.k > 0.02 || player.pos.y > H)) { MIR.exit(); return; }   // the room coming down, or up the shaft: back to the real thing
+  const p = player.pos, zone = player.mode === 'walk' && !player.swim && !player.mantle && !blink && !CL && !leaving && !player.frozen
+    && Math.abs(p.z - MIR.disc.z) < 0.7 && p.x > MIR.a - 1.8 && p.x < MIR.a && p.y < 1.0;
+  const backing = zone && keys.KeyS && !keys.KeyW && -Math.sin(player.yaw) < -0.25;   // facing away from the glass, stepping back towards it
+  const touching = backing && p.x > MIR.a - PR - 0.09 && Math.abs(p.z - MIR.disc.z) < 0.34;
+  if (MIR.slimeStep(dt, backing, touching)) {
+    MIR.cross(); player.yaw = -player.yaw; player.vel.x = -player.vel.x; heldSnap = true;
+    if (MIR.on) markVisited('mirror');
+  }
+}
 
 
 /* ------------------------------------------------------------------ */
@@ -1893,14 +1987,55 @@ placeCamera(0);
 let last = -1, time = 0, frameNo = 0, gunHint = false, riverSeen = false;
 const markVisited = (id) => { const v = Array.isArray(SAVE.get('visited')) ? SAVE.get('visited').slice() : []; if (!v.includes(id)) { v.push(id); SAVE.set('visited', v); } };   // the level-select hall shows a line for every place you have been to
 // playroom.html#river (the level-select hall's RIVER line): start up in the river hall, by the near end
+// playroom.html#mirror (the level-select hall's MIRROR POOL line): start in the reflection, just out of the glass
+if (location.hash === '#mirror') { player.pos.set(MIR.a - 0.45, 0.08, MIR.disc.z); player.yaw = Math.PI / 2; player.pitch = 0; player.vel.set(0, 0, 0); MIR.enter(); markVisited('mirror'); placeCamera(0); }
 if (location.hash === '#river') { player.pos.copy(RH.spawn.pos); player.yaw = RH.spawn.yaw; player.pitch = 0; player.vel.set(0, 0, 0); placeCamera(0); }
+// The white door in the river hall's right-hand bay, and the corridor behind it: some way in, in the dark, it becomes the corridor behind the
+// exit door at the top of the cinema's hall (js/store.js, built here in the background as soon as you reach the river hall), and you walk out
+// of that one toward the hall, its door standing open. Back down that corridor brings you out of this one, and this door is open too.
+let awayStore = false, storeLoad = null;
+const loadStore = () => (storeLoad = storeLoad || import('./store.js').catch((e) => { window.__storeFailed = true; console.error('store failed to load', e); }));
+function openRiverDoor(quiet) {
+  if (RH.doorOpen) return; RH.openDoor(quiet); epEl.style.display = 'none'; loadStore();
+  if (!quiet && AC) try { const t = AC.currentTime, o = AC.createOscillator(), g = AC.createGain(), f = AC.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 900; f.Q.value = 5;
+    o.type = 'sawtooth'; o.frequency.setValueAtTime(110, t); o.frequency.linearRampToValueAtTime(170, t + 0.4); o.frequency.linearRampToValueAtTime(90, t + 0.85);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.035, t + 0.08); g.gain.exponentialRampToValueAtTime(0.0005, t + 1.0); o.connect(f); f.connect(g); g.connect(acRev || acOut); o.start(t); o.stop(t + 1.1); } catch (e) { /* sound is optional */ }
+}
+const corrDark = () => { const w = RH.corrW(player.pos); return w < 0 ? 0 : sstep(RH.CORR.W0 - 3.5, RH.CORR.W0 - 0.15, w); };
+function riverPortal() {
+  const p = player.pos, v = player.vel, w = RH.corrW(p); if (w < 0) return;
+  loadStore(); if (w <= RH.CORR.W0) return;
+  const C = RH.CORR, st = { w, u: RH.corrU(p), y: Math.max(0, p.y - RH.corrFloor), yawRel: player.yaw - C.yawIn, pitch: player.pitch, vin: v.x, vlat: v.z, vy: v.y, h: player.h, crouch: player.crouch, small, scale: scaleK, held: Object.keys(keys).filter((k) => keys[k]) };
+  if (window.__storeStartCinema && window.__storeReady && !window.__storeFailed && window.__storeStartCinema(st)) {
+    awayStore = true; for (const k in keys) keys[k] = false; epEl.style.display = 'none';
+    try { if (AC && AC.state === 'running') AC.suspend(); } catch (e) {}
+    if (music && music.el) { try { music.el.pause(); } catch (e) {} }
+    return;
+  }
+  p.x = RH.corrPoint(C.W0, 0, 0).x; if (v.x > 0) v.x = 0;   // not built yet: the dark goes on a little longer
+}
+window.__cinemaReturn = (st) => {   // walked back down the corridor behind the cinema's exit door: out of this one, toward the white door
+  if (!awayStore) return; awayStore = false;
+  const C = RH.CORR; small = !!st.small; setScale(st.scale || (small ? 0.42 : 1)); openRiverDoor(true);
+  const w = Math.min(2 * C.W0 - st.w, C.W0 - 0.05), u = clamp(-st.u, -(C.half - PR - 0.02), C.half - PR - 0.02);
+  player.pos.copy(RH.corrPoint(w, u, Math.max(0, st.y) + 0.005)); player.vel.set(-st.vin, st.vy || 0, -st.vlat);
+  player.yaw = C.yawIn + Math.PI + st.yawRel; player.pitch = st.pitch || 0; player.h = st.h || H_STAND; player.crouch = !!st.crouch; player.bob = 0;
+  player.mode = 'walk'; player.mantle = null; player.swim = false; blink = null; fade = 0;
+  for (const k in keys) keys[k] = false; for (const k of st.held || []) keys[k] = true;
+  last = -1; initAudio(); if (music && music.el) music.el.play().catch(() => {});
+  canvas.style.display = 'block'; requestAnimationFrame(frame);
+};
+// playroom.html#cinemadoor: arriving from the cinema's corridor on another page (the level pages have the store too)
+if (location.hash === '#cinemadoor') { openRiverDoor(true); player.pos.copy(RH.corrPoint(RH.CORR.W0 - 0.4, 0, 0.005)); player.yaw = RH.CORR.yawIn + Math.PI; player.pitch = 0; player.vel.set(0, 0, 0); placeCamera(0); loadStore(); }
 function frame(now) {
+  if (awayStore) return;   // the cinema has the screen
   requestAnimationFrame(frame);
   if (last < 0) last = now;
   const dt = clamp((now - last) / 1000, 0, 1 / 20); last = now; time += dt; frameNo++;
-  if (keys.ArrowLeft) player.yaw += 1.8 * dt; if (keys.ArrowRight) player.yaw -= 1.8 * dt;
+  { const mx = MIR ? MIR.sx : 1; if (keys.ArrowLeft) player.yaw += 1.8 * dt * mx; if (keys.ArrowRight) player.yaw -= 1.8 * dt * mx; }
   if (keys.ArrowUp) player.pitch = Math.min(1.5, player.pitch + 1.3 * dt); if (keys.ArrowDown) player.pitch = Math.max(-1.5, player.pitch - 1.3 * dt);
   updatePlayer(dt);
+  mirrorStep(dt);
   placeCamera(time);
   if (CL) collapseCamera(dt);
   holdBall(dt);
@@ -1915,10 +2050,10 @@ function frame(now) {
   const wt = waterAt(cp.x, cp.y, cp.z), uw = wt !== null && cp.y < wt ? 1 : 0; under += (uw - under) * Math.min(1, dt * 10);
   const inTunnel = cp.y > 1.9 && cp.y < 10 && (cp.z < Z0 - 0.3 || cp.x > RX + 0.3) ? 1 : 0;
   RH.update(dt, cp, under, AC);
-  if (RH.k > 0.5 && !riverSeen) { riverSeen = true; markVisited('river'); }
-  if (music) { const gn = music.out && music.out.gain; if (gn) { if (music.g0 === undefined) music.g0 = gn.value; gn.value = music.g0 * (1 - 0.85 * RH.k); } else if (music.el) music.el.volume = 0.3 * (1 - 0.85 * RH.k); }   // the playroom's music is far away up here
+  if (RH.k > 0.5 && !riverSeen) { riverSeen = true; markVisited('river'); loadStore(); }
+  if (music) { const gn = music.out && music.out.gain; const mq = MIR && MIR.on ? 0.3 : 1; if (gn) { if (music.g0 === undefined) music.g0 = gn.value; gn.value = music.g0 * (1 - 0.85 * RH.k) * mq; } else if (music.el) music.el.volume = 0.3 * (1 - 0.85 * RH.k) * mq; }   // the playroom's music is far away up here
   wUni.uTime.value = time; wUni.uCam.value.copy(cp);
-  grade.uniforms.uTime.value = time; grade.uniforms.uUnder.value = under; grade.uniforms.uFade.value = leaving ? grade.uniforms.uFade.value : fade;
+  grade.uniforms.uTime.value = time; grade.uniforms.uUnder.value = under; grade.uniforms.uFade.value = leaving ? grade.uniforms.uFade.value : Math.max(fade, corrDark());
   if (!bookSeen) {
     bookArrow.position.y = 0.4 + Math.abs(Math.sin(time * 3.6)) * 0.07; bookArrow.rotation.y = time * 1.2;   // hop, hop
     if (bookAim()) { _bp.copy(BOOK).project(camera); epEl.style.display = 'block'; epEl.style.left = ((_bp.x * 0.5 + 0.5) * innerWidth) + 'px'; epEl.style.top = ((-_bp.y * 0.5 + 0.5) * innerHeight) + 'px'; }
@@ -1928,7 +2063,10 @@ function frame(now) {
   if (gun.group) { gun.group.rotation.y = time * 0.9; gun.group.position.y = gun.y + Math.sin(time * 1.7) * 0.012; }
   if (gunNear()) { _bp.set(gun.x, gun.y + 0.05, gun.z).project(camera); epEl.style.display = 'block'; epEl.style.left = ((_bp.x * 0.5 + 0.5) * innerWidth) + 'px'; epEl.style.top = ((-_bp.y * 0.5 + 0.5) * innerHeight) + 'px'; gunHint = true; }
   else if (grateNear()) { _bp.set(GR.x, GR.y + GR.r + 0.05, PZ1).project(camera); epEl.style.display = 'block'; epEl.style.left = ((_bp.x * 0.5 + 0.5) * innerWidth) + 'px'; epEl.style.top = ((-_bp.y * 0.5 + 0.5) * innerHeight) + 'px'; gunHint = true; }
+  else if (chairNear()) { _bp.copy(chairAt).project(camera); epEl.style.display = 'block'; epEl.style.left = ((_bp.x * 0.5 + 0.5) * innerWidth) + 'px'; epEl.style.top = ((-_bp.y * 0.5 + 0.5) * innerHeight) + 'px'; gunHint = true; }
+  else if (RH.doorNear(cp, camera.getWorldDirection(_cd))) { _bp.copy(RH.doorAt).project(camera); epEl.style.display = 'block'; epEl.style.left = ((_bp.x * 0.5 + 0.5) * innerWidth) + 'px'; epEl.style.top = ((-_bp.y * 0.5 + 0.5) * innerHeight) + 'px'; gunHint = true; }
   else if (gunHint) { gunHint = false; epEl.style.display = 'none'; }
+  if (MIR.on && epEl.style.display === 'block') epEl.style.left = (innerWidth - parseFloat(epEl.style.left)) + 'px';   // in the mirror the picture is the other way round
   bookPivot.rotation.y = Math.PI / 2 - 0.25 + time * 0.45;   // the book turns slowly on the spot
   if (bookOpen && Math.hypot(BOOK.x - cp.x, BOOK.z - cp.z) > 2.2) setBook(false);
   grade.uniforms.uHappy.value += ((dread === 0 ? 1 : 0) - grade.uniforms.uHappy.value) * Math.min(1, dt * 6);
@@ -1937,7 +2075,7 @@ function frame(now) {
   grade.uniforms.uDark.value += (inTunnel - grade.uniforms.uDark.value) * Math.min(1, dt * 3);
   if (CL) updateCollapse(dt, now);
   if (moving || ballsAwake > 0 || frameNo < 6 || CL) renderer.shadowMap.needsUpdate = true;
-  composer.render();
+  MIR.frame(dt, time, { gray: grade.uniforms.uGray.value, under, fade: grade.uniforms.uFade.value }, () => composer.render());   // in the mirror, the PS2 picture instead
 }
 requestAnimationFrame(frame);
 // playroom.html#collapse: skip the puzzle and watch the room come down (for testing the transition)
