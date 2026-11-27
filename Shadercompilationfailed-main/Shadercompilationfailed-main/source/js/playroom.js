@@ -773,7 +773,7 @@ const mazePipeMat = mazeMat.clone(); mazePipeMat.uniforms = mazeUni; mazePipeMat
     }
     col.push(o, at(1, 0), at(1, 1), at(0, 1));
   };
-  const H2 = y1 - y0;
+  const H2 = y1 - y0, WT = 0.07, WH = WT / 2;   // WT: how thick the walls are
   for (let c = 0; c < NX * NZ; c++) {
     const i = c % NX, j = (c / NX) | 0, xa = x0 + i * C, za = z0 + j * C;
     quad([xa, y0, za], [C, 0, 0], [0, 0, C], [0, 1, 0], c);            // floor
@@ -785,18 +785,31 @@ const mazePipeMat = mazeMat.clone(); mazePipeMat.uniforms = mazeUni; mazePipeMat
       quad([hx0, y1, za], [2 * hs, 0, 0], [0, 0, hz0 - za], [0, -1, 0], c, 2);
       quad([hx0, y1, hz1], [2 * hs, 0, 0], [0, 0, za + C - hz1], [0, -1, 0], c, 2);
     }
-    if (wx[j * (NX + 1) + i]) quad([xa, y0, za], [0, 0, C], [0, H2, 0], [1, 0, 0], c);
-    if (wx[j * (NX + 1) + i + 1]) quad([xa + C, y0, za], [0, 0, C], [0, H2, 0], [-1, 0, 0], c);
-    if (wz[(j + 1) * NX + i]) quad([xa, y0, za + C], [C, 0, 0], [0, H2, 0], [0, 0, -1], c);
-    if (wz[j * NX + i] && c !== IN) quad([xa, y0, za], [C, 0, 0], [0, H2, 0], [0, 0, 1], c);
+    // the walls have a thickness (WT): each face stands WH in from the line between two cells, and stops WH short of the corners, where a post fills in
+    if (wx[j * (NX + 1) + i]) quad([xa + WH, y0, za + WH], [0, 0, C - WT], [0, H2, 0], [1, 0, 0], c);
+    if (wx[j * (NX + 1) + i + 1]) quad([xa + C - WH, y0, za + WH], [0, 0, C - WT], [0, H2, 0], [-1, 0, 0], c);
+    if (wz[(j + 1) * NX + i]) quad([xa + WH, y0, za + C - WH], [C - WT, 0, 0], [0, H2, 0], [0, 0, -1], c);
+    if (wz[j * NX + i] && c !== IN) quad([xa + WH, y0, za + WH], [C - WT, 0, 0], [0, H2, 0], [0, 0, 1], c);
+  }
+  // a square post wherever walls end or meet: a wall that stops in the middle of the maze shows a solid end, not a paper edge.
+  // Each post shows only its sides that no wall runs into, and none that face out of the maze.
+  for (let j = 0; j <= NZ; j++) for (let i = 0; i <= NX; i++) {
+    const xN = j > 0 && wx[(j - 1) * (NX + 1) + i], xS = j < NZ && wx[j * (NX + 1) + i];   // walls along x = i, toward -z and +z
+    const zW = i > 0 && wz[j * NX + i - 1], zE = i < NX && wz[j * NX + i];                 // walls along z = j, toward -x and +x
+    if (!(xN || xS || zW || zE)) continue;
+    const vx = x0 + i * C, vz = z0 + j * C, cell = Math.min(j, NZ - 1) * NX + Math.min(i, NX - 1);
+    if (!zE && i < NX) quad([vx + WH, y0, vz - WH], [0, 0, WT], [0, H2, 0], [1, 0, 0], cell, 1);
+    if (!zW && i > 0) quad([vx - WH, y0, vz - WH], [0, 0, WT], [0, H2, 0], [-1, 0, 0], Math.min(j, NZ - 1) * NX + i - 1, 1);
+    if (!xS && j < NZ) quad([vx - WH, y0, vz + WH], [WT, 0, 0], [0, H2, 0], [0, 0, 1], cell, 1);
+    if (!xN && j > 0) quad([vx - WH, y0, vz - WH], [WT, 0, 0], [0, H2, 0], [0, 0, -1], (j - 1) * NX + Math.min(i, NX - 1), 1);
   }
   // the way in: the entrance cell's front wall with a round hole where the pipe comes through
   {
-    const xa = x0 + IN * C, sh = new THREE.Shape(); sh.moveTo(xa, y0); sh.lineTo(xa + C, y0); sh.lineTo(xa + C, y1); sh.lineTo(xa, y1); sh.closePath();
+    const xa = x0 + IN * C, sh = new THREE.Shape(); sh.moveTo(xa + WH, y0); sh.lineTo(xa + C - WH, y0); sh.lineTo(xa + C - WH, y1); sh.lineTo(xa + WH, y1); sh.closePath();
     const hole = new THREE.Path(); hole.absarc(GR.x, GR.y, GR.r, 0, Math.PI * 2, true); sh.holes.push(hole);
     const g = new THREE.ShapeGeometry(sh, 24).toNonIndexed(), pa = g.attributes.position.array, cp = [];
     for (let k = 0; k < pa.length; k += 9) {
-      const v = [0, 1, 2].map((m) => [pa[k + m * 3], pa[k + m * 3 + 1], z0]);
+      const v = [0, 1, 2].map((m) => [pa[k + m * 3], pa[k + m * 3 + 1], z0 + WH]);
       tri(v[0], v[1], v[2], [0, 0, 1], IN); cp.push(...v[0], ...v[1], ...v[2]);
     }
     const cg = new THREE.BufferGeometry(); cg.setAttribute('position', new THREE.Float32BufferAttribute(cp, 3)); addCollider(cg, null);
@@ -808,7 +821,7 @@ const mazePipeMat = mazeMat.clone(); mazePipeMat.uniforms = mazeUni; mazePipeMat
     const cg = new THREE.BufferGeometry(); cg.setAttribute('position', new THREE.Float32BufferAttribute(cp, 3)); addCollider(cg, null); }
   // the pipe from the pool wall to the maze
   {
-    const len = z0 - PZ1, pg = new THREE.CylinderGeometry(GR.r, GR.r, len, 28, 6, true); pg.rotateX(Math.PI / 2); pg.translate(GR.x, GR.y, PZ1 + len / 2);
+    const len = z0 + WH - PZ1, pg = new THREE.CylinderGeometry(GR.r, GR.r, len, 28, 6, true); pg.rotateX(Math.PI / 2); pg.translate(GR.x, GR.y, PZ1 + len / 2);   // on through the thickness of the maze's wall
     const pa = pg.attributes.position.array, la = new Float32Array(pa.length);
     for (let k = 0; k < pa.length; k += 3) { const t = clamp((pa[k + 2] - PZ1) / len, 0, 1), L = lightAt(pa[k], pa[k + 1], pa[k + 2], IN);
       la[k] = L[0] + 0.25 * (1 - t); la[k + 1] = L[1] + 0.5 * (1 - t); la[k + 2] = L[2] + 0.45 * (1 - t); }
@@ -979,6 +992,19 @@ function freeAt(x, y, z, h) {
   for (const hy of [PR, h * 0.5, h - PR]) { _seg.start.set(px, y + hy, pz); _seg.end.set(x, y + hy, z); if (segPierced()) return false; }
   return true;
 }
+// out of the water onto the edge (the pool's, or the river's banks) in direction (dx, dz): the nearest dry place ahead (or a little to either
+// side) with room to stand, up to 1.2 m off; a palm or a boulder on the bank only moves where you come out
+function climbOut(dx, dz, wtop) {
+  const p = player.pos, l = Math.hypot(dx, dz); if (l < 1e-4) return false;
+  const ux = dx / l, uz = dz / l, ey = wtop !== null && wtop > 10 ? RH.edgeY : 0;
+  for (const d of [0.45, 0.6, 0.8, 1.0, 1.2]) for (const a of [0, 0.35, -0.35, 0.7, -0.7]) {
+    const c = Math.cos(a), s = Math.sin(a), tx = p.x + (ux * c - uz * s) * d, tz = p.z + (ux * s + uz * c) * d;
+    if (ey ? RH.inRiverXZ(tx, tz) : inBasin(tx, tz)) continue;
+    if (!capFree(tx, ey + 0.06, tz, H_STAND)) continue;
+    player.mantle = { t: 0, dur: 0.5 + d * 0.15, from: p.clone(), to: new V3(tx, ey + 0.03, tz) }; return true;
+  }
+  return false;
+}
 // climb onto / over anything up to chest-and-a-bit high in the direction of travel
 function tryMantle(dx, dz) {
   const p = player.pos, fwd = PR * 2 + 0.07;
@@ -1058,15 +1084,13 @@ function stepPlayer(dt) {
     p.addScaledVector(v, dt);
     collidePlayer(dt); player.onGround = false;
     player.bob += Math.hypot(v.x, v.z) * dt * 0.5;
-    // pushing against the pool edge at the surface: climb out
+    // climbing out at the surface (the pool, or the river's banks): push against the edge, or press Space close to it, and you haul yourself out
     const hl = Math.hypot(wx, wz);
-    if (hl > 0.3 && p.y > floatY - 0.25 && sw > 1e-5 && Math.hypot(p.x - sx0, p.z - sz0) < sw * 0.45) {
+    if (p.y > floatY - 0.35 && keys.Space && !player.spaceHeld) { player.spaceHeld = true; if (climbOut(hl > 0.3 ? wx : -sy, hl > 0.3 ? wz : -cy, wtop)) return; }
+    if (!keys.Space) player.spaceHeld = false;
+    if (hl > 0.3 && p.y > floatY - 0.35 && sw > 1e-5 && Math.hypot(p.x - sx0, p.z - sz0) < sw * 0.45) {
       player.blocked += dt;
-      if (player.blocked > 0.15) {
-        player.blocked = 0; const tx = p.x + wx / hl * 0.6, tz = p.z + wz / hl * 0.6;
-        const ey = wtop !== null && wtop > 10 ? RH.edgeY : 0, wet = ey ? RH.inRiverXZ(tx, tz) : inBasin(tx, tz);
-        if (!wet && freeAt(tx, ey + 0.06, tz, H_STAND)) player.mantle = { t: 0, dur: 0.55, from: p.clone(), to: new V3(tx, ey + 0.03, tz) };
-      }
+      if (player.blocked > 0.08) { player.blocked = 0; climbOut(wx, wz, wtop); }
     } else player.blocked = 0;
     return;
   }
@@ -1078,15 +1102,20 @@ function stepPlayer(dt) {
   player.hop = Math.max(0, player.hop - dt);
   v.x += (wx - v.x) * k; v.z += (wz - v.z) * k;
   v.y -= G * dt;
+  // wading (the river is shallower than you are tall, so there you walk on its bed): Space by the bank hauls you out, rather than a hop
+  const wading = depth > 0.25 * PS;
+  if (wading && keys.Space && !player.spaceHeld) { player.spaceHeld = true; if (climbOut(il > 0 ? wx : -sy, il > 0 ? wz : -cy, wtop)) return; }
+  if (!keys.Space) player.spaceHeld = false;
   if (keys.Space && player.ground > 0 && v.y <= 0.01 && player.h > H_STAND * 0.9) { v.y = 3.2; player.ground = 0; }
   const px0 = p.x, pz0 = p.z, want = Math.hypot(v.x, v.z) * dt;
   p.addScaledVector(v, dt);
   player.onGround = collidePlayer(dt);
   player.ground = player.onGround ? 0.12 : Math.max(0, player.ground - dt);
   // walking into something low (pit rim, slide lip, mats): climb it automatically
-  if (il > 0 && player.onGround && want > 1e-5 && Math.hypot(p.x - px0, p.z - pz0) < want * 0.45) {
+  // (wading, the bank is higher than that, and walking into it at a slant you slide along it rather than stop: climb out of the water instead)
+  if (il > 0 && player.onGround && want > 1e-5 && Math.hypot(p.x - px0, p.z - pz0) < want * (wading ? 0.8 : 0.45)) {
     player.blocked += dt;
-    if (player.blocked > 0.09) { player.blocked = 0; const l = Math.hypot(wx, wz) || 1; if (tryMantle(wx / l, wz / l)) return; }
+    if (player.blocked > (wading ? 0.08 : 0.09)) { player.blocked = 0; const l = Math.hypot(wx, wz) || 1; if (wading && climbOut(wx, wz, wtop)) return; if (tryMantle(wx / l, wz / l)) return; }
   } else if (player.onGround) player.blocked = 0;
   if (player.onGround) player.bob += Math.hypot(v.x, v.z) * dt;
   // stepping onto a slide heading downhill starts the ride
@@ -1138,6 +1167,7 @@ function roomAt(y, k) {
   _box.makeEmpty(); _box.expandByPoint(_seg.start); _box.expandByPoint(_seg.end); _box.min.addScalar(-_capR); _box.max.addScalar(_capR);
   bvh.shapecast(capTest); return !_capBlocked && !segPierced();
 }
+window.__pr = { player, RH, climbOut };   // a handle for testing from the console
 window.__sizeGunScene = {
   can(toSmall) {
     if (player.frozen || player.mode !== 'walk' || player.mantle || blink || CL) return false;

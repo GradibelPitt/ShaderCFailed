@@ -2,7 +2,8 @@
 // Its pages come from the scene (SCF_G.setPages(fn): fn() returns the pages for right now); every scene also gets a page of controls.
 // Top left of the book: back to the main menu (index.html; click twice). Top middle: Level select, straight to the level-select hall (hub.html),
 // always shown but locked until this save has been there once (SCF_SAVE hubSeen). Top right: settings (mouse sensitivity, volume), kept for all saves,
-// and under them Admin settings, which act on the save being played only: Unlock all levels (SCF_SAVE allLevels).
+// and under them Admin settings, which act on the save being played only: Unlock all levels (SCF_SAVE allLevels), and Unlock all items:
+// every thing there is to carry put in your hands (SCF_SAVE allItems; adminItems: the ones it gave, taken back again when it is turned off).
 // While the book is open the game gets no keys and no clicks, and the pointer is let go so the buttons can be clicked.
 // Also here: the settings themselves (window.SCF_SETTINGS), and the volume, applied to every sound the page makes by putting a gain
 // between each audio context and its speakers (so every scene's own sound code works unchanged). Load this right after js/save.js.
@@ -101,18 +102,36 @@
     b.classList.toggle('locked', !ok); b.innerHTML = ok ? 'Level select' : '&#x1F512; Level select';
     b.title = ok ? 'Go straight to the level-select hall' : 'Locked: you have not found the level-select hall yet';
   }
+  // Admin: every thing there is to carry, put in your hands; turned off, only what this gave is taken back (what you had found stays)
+  function allItems(on) {
+    const SV = window.SCF_SAVE, E = window.Equip; if (!SV || !E) return;
+    if (on) {
+      const gave = [];
+      if (!SV.get('gun')) { SV.set('gun', true); gave.push('gun'); }   // the size gun is carried once the save says it has been found
+      for (const id of ['socket', 'pump', 'rocket']) if (E.add(id)) gave.push(id);
+      E.list(); SV.set('adminItems', gave); SV.set('allItems', true);
+    } else {
+      const gave = Array.isArray(SV.get('adminItems')) ? SV.get('adminItems') : [];
+      for (const id of gave) { if (id === 'gun') SV.set('gun', false); E.remove(id); }
+      SV.set('adminItems', []); SV.set('allItems', false);
+    }
+    E.refresh(); if (window.SizeGun) try { window.SizeGun.refresh(); } catch (e) {}
+  }
   function render() {
     const body = root.querySelector('#gmBody'); root.querySelector('#gmSet').innerHTML = view === 'admin' ? '&larr; Back to settings' : view === 'settings' ? '&larr; Back to the book' : 'Settings &#9881;';
     if (view === 'admin') {   // acts on the save being played, not on every save
-      const on = !!(window.SCF_SAVE && SCF_SAVE.get('allLevels'));
+      const on = !!(window.SCF_SAVE && SCF_SAVE.get('allLevels')), onI = !!(window.SCF_SAVE && SCF_SAVE.get('allItems'));
       body.innerHTML = '<h1>Admin settings</h1><div class="set">'
         + '<label class="tog"><input type="checkbox" id="gmAll"' + (on ? ' checked' : '') + '> Unlock all levels</label>'
-        + '<p class="note">Only this save. The level-select hall shows every place, and Level select opens.</p></div>'
+        + '<p class="note">Only this save. The level-select hall shows every place, and Level select opens.</p>'
+        + '<label class="tog"><input type="checkbox" id="gmItems"' + (onI ? ' checked' : '') + '> Unlock all items</label>'
+        + '<p class="note">Only this save. The size gun, the power strip, the air pump and the inflatable rocket, all in your hands (scroll to switch). Turned off, it takes back only what it gave.</p></div>'
         + '<p class="close">This save only &middot; <kbd class="gk">G</kbd> close</p>';
       body.querySelector('#gmAll').onchange = (e) => {
         if (window.SCF_SAVE) SCF_SAVE.set('allLevels', !!e.target.checked);
         hubButton(); if (typeof hubRows === 'function') hubRows();   // standing in the hall: the screen changes now
       };
+      body.querySelector('#gmItems').onchange = (e) => allItems(!!e.target.checked);
       return;
     }
     if (view === 'settings') {

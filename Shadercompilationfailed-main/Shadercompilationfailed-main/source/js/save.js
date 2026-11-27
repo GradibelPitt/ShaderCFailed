@@ -12,6 +12,7 @@
 //   grate      true once the round mesh door low on the pool's deep-end wall has been opened (it stays open)
 //   allLevels  true when Admin settings (G book > Settings > Admin settings) has unlocked every level for this save: the level-select hall's
 //              screen then lists every place, and the G book's Level select button opens, visited or not
+//   allItems   true when Admin settings has put every thing there is to carry in your hands; adminItems: the ids it gave (taken back when it is turned off)
 //   gun        true once the size gun (伸缩枪) at the end of the flooded passages behind the pool has been found (js/sizegun.js: Z smaller, X bigger)
 'use strict';
 (function () {

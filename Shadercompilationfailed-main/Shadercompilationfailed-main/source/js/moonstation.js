@@ -857,13 +857,15 @@ function footstep(k) {
 }
 
 /* ---------------- its name, once, as you arrive ---------------- */
+// shown on the scene's own clock (fadeT, which only runs once the hall is being drawn), not on timers from when the page loaded: the first
+// load can stall for seconds while the shaders are built, and timers would then fire one straight after the other and the name never show
+const MNAME = { el: null, on: false, off: false };
 {
-  const el = document.createElement('div'); el.id = 'mname';
+  const el = document.createElement('div'); el.id = 'mname'; MNAME.el = el;
   el.innerHTML = 'MOON STATION<small>月球空间站</small>';
   el.style.cssText = "position:fixed;left:0;right:0;bottom:16%;text-align:center;color:#dfe8f2;font:300 30px/1.2 'Segoe UI Light','Segoe UI','Helvetica Neue',Arial,sans-serif;letter-spacing:.9em;text-indent:.9em;opacity:0;transition:opacity 2.4s;pointer-events:none;z-index:4;text-shadow:0 0 18px rgba(140,180,255,.35)";
   document.body.appendChild(el);
   const sm = el.querySelector('small'); sm.style.cssText = 'display:block;margin-top:10px;font-size:15px;letter-spacing:.6em;text-indent:.6em;color:#9fb0c2';
-  setTimeout(() => { el.style.opacity = '1'; }, 2200); setTimeout(() => { el.style.opacity = '0'; }, 8200);
 }
 if (window.SCF_G) window.SCF_G.setPages(() => [{ t: 'Moon Station', html: '<p>A hall of the station over the Moon.</p><p>Walk to the light at the far end. It is a long way.</p><p>Hold <kbd>Shift</kbd> to run, or take the little tug by the door: <kbd>E</kbd> to get in.</p>' }]);
 
@@ -1260,10 +1262,11 @@ const PLAT = [];   // left out of the floor's mirror picture, as the floor is
       float big = fbm3(vec3(q / 420.0, 11.0)), mid = fbm3(vec3(q / 38.0, 13.0)), small = noise3(vec3(q / 2.6, 17.0));
       float wet = clamp(smoothstep(0.45, 0.70, big) * 0.6 + smoothstep(0.50, 0.75, mid) * 0.3, 0.0, 1.0);
       // slabs: great ones with a wide joint, a finer grid inside them, and each small slab its own shade
-      float j = max(lines(q.x, 120.0, 0.35), lines(q.y, 120.0, 0.35)), j2 = max(lines(q.x, 12.0, 0.03), lines(q.y, 12.0, 0.03));
+      float j = max(lines(q.x, 120.0, 0.35), lines(q.y, 120.0, 0.35)), j2 = max(lines(q.x, 12.0, 0.05), lines(q.y, 12.0, 0.05)), j3 = max(lines(q.x, 3.0, 0.012), lines(q.y, 3.0, 0.012));
       vec2 sid = floor(q / 12.0); float st = fract(sin(dot(sid, vec2(127.1, 311.7))) * 43758.5453) * (1.0 - smoothstep(0.5, 3.0, px));
-      vec3 alb = vec3(0.60, 0.61, 0.62) * (0.80 + 0.30 * mid + 0.10 * small + 0.08 * (st - 0.5)) * (1.0 - 0.45 * j - 0.16 * j2);
-      alb *= 1.0 - 0.10 * smoothstep(0.55, 0.85, fbm3(vec3(q / 9.0, 19.0)));          // stains
+      float gr = (noise3(vec3(q / 0.25, 23.0)) - 0.5) * (1.0 - smoothstep(0.03, 0.12, px));      // close to, the grain of it
+      vec3 alb = vec3(0.60, 0.61, 0.62) * (0.78 + 0.32 * mid + 0.12 * small + 0.18 * (st - 0.5) + 0.12 * gr) * (1.0 - 0.50 * j - 0.32 * j2 - 0.14 * j3);
+      alb *= (1.0 - 0.18 * smoothstep(0.55, 0.85, fbm3(vec3(q / 9.0, 19.0)))) * (1.0 - 0.10 * smoothstep(0.5, 0.8, fbm3(vec3(q.x / 3.0, q.y / 30.0, 29.0))));   // stains, and long scuffs
       vec3 n = vec3(0.0, 1.0, 0.0);
       vec3 col = shade(vW, n, alb * (1.0 - 0.25 * wet), 0.5, 0.25) + alb * vec3(0.05, 0.06, 0.08);
       // what is seen in it
@@ -1274,7 +1277,7 @@ const PLAT = [];   // left out of the floor's mirror picture, as the floor is
       rf /= 7.0;
       vec3 v = normalize(uCam - vW);
       float fres = 0.04 + 0.96 * pow(1.0 - max(v.y, 0.0), 5.0);
-      float k = mix(0.06, 0.55, wet) * mix(0.5, 1.0, fres);
+      float k = mix(0.10, 0.70, wet) * mix(0.5, 1.0, fres);
       col = col * (1.0 - k * 0.5) + rf * k;
       gl_FragColor = vec4(haze(col, vW), 1.0);
     }`,
@@ -1472,6 +1475,8 @@ function frame(now) {
   placeCamera(uTime.value); uCam.value.copy(camera.position);
   // speed: no dust in the air any more; what tells you how fast you go is the floor and the walls streaming past, smeared out from the middle
   spdK += ((CAR.on ? clamp(Math.abs(CAR.v) / CAR_MAX, 0, 1) : 0) - spdK) * Math.min(1, dt * 2.5);
+  if (!MNAME.on && fadeT > 2.2) { MNAME.on = true; MNAME.el.style.opacity = '1'; }
+  if (!MNAME.off && fadeT > 8.2) { MNAME.off = true; MNAME.el.style.opacity = '0'; }
   if (blinkMat) blinkMat.opacity = 0.15 + 0.85 * (Math.sin(uTime.value * Math.PI * 0.9) > 0.2 ? 1 : 0);
   grade.uniforms.uTime.value = uTime.value; grade.uniforms.uSpd.value = Math.pow(spdK, 1.3); grade.uniforms.uFade.value = clamp(1 - (fadeT - 0.4) / 3.5, 0, 1);
   renderMirror();
