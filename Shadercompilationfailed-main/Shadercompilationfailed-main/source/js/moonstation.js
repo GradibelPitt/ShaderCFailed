@@ -86,16 +86,16 @@ vec3 haze(vec3 col, vec3 p){
 `;
 const VERT = `#include <common>
 #include <logdepthbuf_pars_vertex>
-varying vec3 vW; varying vec3 vN; varying vec4 vR;
+varying vec3 vW; varying vec3 vN; varying vec4 vR; varying vec2 vUv2;
 uniform mat4 uMirrorVP;
-void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; vN = normalize(mat3(modelMatrix) * normal); vR = uMirrorVP * w;
+void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; vN = normalize(mat3(modelMatrix) * normal); vR = uMirrorVP * w; vUv2 = uv;
   gl_Position = projectionMatrix * viewMatrix * w;
   #include <logdepthbuf_vertex>
 }`;
 const FRAG = `#include <logdepthbuf_pars_fragment>
 ${NOISE}${LIGHT}
 uniform vec3 uBase;
-varying vec3 vW; varying vec3 vN; varying vec4 vR;
+varying vec3 vW; varying vec3 vN; varying vec4 vR; varying vec2 vUv2;
 float lines(float v, float period, float w){ float f = abs(fract(v / period + 0.5) - 0.5) * period; float aa = fwidth(v) * 1.2; return 1.0 - smoothstep(w - aa, w + aa, f); }
 void main(){
   #include <logdepthbuf_fragment>
@@ -126,6 +126,23 @@ void main(){
   // the little door: painted steel, a frame round it
   vec3 alb = vec3(0.30, 0.31, 0.30);
   col = shade(vW, n, alb, 0.4, 0.5);
+#elif KIND == 8
+  // the tug's paint: glossy, a clear coat that shows the light of the open end, brighter at a glancing angle
+  vec3 v8 = normalize(uCam - vW); float fr = pow(1.0 - max(dot(n, v8), 0.0), 5.0);
+  col = shade(vW, n, uBase, 0.16, 1.5) + uBase * vec3(0.035, 0.04, 0.05) * (0.6 + 0.4 * max(n.y, 0.0)) + vec3(0.06, 0.08, 0.11) * fr;
+#elif KIND == 9
+  // rubber: near black, rough, the tread cut across the face of the tyre
+  float tr = step(0.5, fract(vUv2.x * 64.0)) * smoothstep(0.25, 0.3, vUv2.y) * smoothstep(0.75, 0.7, vUv2.y);
+  vec3 alb = vec3(0.028, 0.028, 0.03) * (1.0 - 0.5 * tr);
+  col = shade(vW, n, alb, 0.8, 0.05) + alb * 0.4;
+#elif KIND == 10
+  // bright metal: the bumper, rims, lamp rims, the chequered step plate
+  vec3 alb = vec3(0.55, 0.56, 0.58) * (0.9 + 0.2 * step(0.5, fract((vW.x + vW.z) * 30.0)) * step(0.5, fract((vW.x - vW.z) * 30.0)));
+  col = shade(vW, n, alb, 0.12, 2.2) + alb * vec3(0.04, 0.045, 0.055);
+#elif KIND == 11
+  // black plastic, the steel frame, the seat: dark, satin
+  vec3 alb = vec3(0.035, 0.036, 0.04);
+  col = shade(vW, n, alb, 0.45, 0.35) + alb * 0.5;
 #elif KIND == 7
   // the white platform and its rails
   float g = max(lines(vW.x, 12.0, 0.04), lines(vW.z, 12.0, 0.04));
@@ -838,32 +855,78 @@ function walkClamp(pos, m) {
 // The hall is far too big to walk, so by the door there is something to drive, absurdly fast. E to get in (and out,
 // once it has stopped). W to go, S to brake (and back up), A/D to steer, Space for the hand brake. Flat out it does about 640 m/s,
 // so the light at the far end is some twenty seconds away. It stops dead at the walls.
-const CAR = { x: DOOR.x + 7, z: ZB - 10, yaw: 0, v: 0, steer: 0, on: false, g: new THREE.Group(), hintT: 0, fov: 72 };
-const CAR_MAX = 640, CAR_ACC = 230, SEAT = [0.0, 1.62, 0.55], BUS = { hw: 0.75, hl: 1.45 };
-// It is one of those little airport tugs: no body to speak of, just a white chassis with a blue stripe, a big orange bonnet over the
-// front, one open seat behind it, a steering wheel, a bumper of bent tube, four fat black wheels.
+const CAR = { x: DOOR.x + 7, z: ZB - 10, yaw: 0, v: 0, steer: 0, on: false, g: new THREE.Group(), hintT: 0, fov: 72, roll: 0, wheels: [], hide: null };
+const CAR_MAX = 640, CAR_ACC = 230, SEAT = [0.0, 1.62, 0.6], BUS = { hw: 0.75, hl: 1.55 };
+// It is an airport baggage tug, done as close to the real thing as I can: a white steel body with a blue stripe and rounded edges, a big
+// orange bonnet with a grille, round headlamps, black fenders over fat treaded tyres on steel rims (the wheels turn, the front ones steer),
+// a bent-tube bumper, mirrors, an open seat behind a small dash with gauges, a step plate in chequered aluminium, a tow hitch, tail lamps
+// and an amber beacon. While you drive, the seat back, the beacon and the back panel are left out, so nothing hides the view any way you look.
 {
-  const box = (x0, y0, z0, x1, y1, z1) => { const b = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0); b.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2); return b; };
-  const white = [], dark = [], orange = [], blue = [], chrome = [];
-  white.push(box(-0.72, 0.38, -1.4, 0.72, 0.95, 1.35));                                 // the chassis
-  white.push(box(-0.74, 0.95, 0.1, 0.74, 1.05, 1.35));                                  // the deck round the seat
-  white.push(box(-0.72, 0.95, 1.1, 0.72, 1.35, 1.35));                                  // the back panel
-  blue.push(box(-0.725, 0.5, -1.4, -0.715, 0.6, 1.35), box(0.715, 0.5, -1.4, 0.725, 0.6, 1.35));   // the stripe
-  { const h = new RoundedBoxGeometry(1.42, 0.32, 1.45, 4, 0.12); h.translate(0, 1.08, -0.68); orange.push(h); }   // the bonnet
-  dark.push(box(-0.3, 1.05, 0.35, 0.3, 1.2, 0.95), box(-0.3, 1.2, 0.85, 0.3, 1.75, 0.98));                      // the seat
-  { const sw = new THREE.TorusGeometry(0.19, 0.022, 8, 28); sw.rotateX(-1.0); sw.translate(0, 1.42, 0.08); dark.push(sw); dark.push(new THREE.CylinderGeometry(0.025, 0.025, 0.5, 8).rotateX(-0.6).translate(0, 1.25, -0.04)); }
-  for (const sx of [-1, 1]) for (const sz of [-0.95, 0.95]) { const w = new THREE.CylinderGeometry(0.36, 0.36, 0.3, 22); w.rotateZ(Math.PI / 2); w.translate(sx * 0.66, 0.36, sz); dark.push(w); }
-  // the bumper: a frame of tube with uprights
-  const tube = (a, b) => { const A = new V3(...a), B = new V3(...b), d = B.clone().sub(A), c = new THREE.CylinderGeometry(0.03, 0.03, d.length(), 8); c.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new V3(0, 1, 0), d.clone().normalize())); c.translate((A.x + B.x) / 2, (A.y + B.y) / 2, (A.z + B.z) / 2); chrome.push(c); };
-  for (const y of [0.55, 0.85]) tube([-0.62, y, -1.55], [0.62, y, -1.55]);
-  for (const x of [-0.62, -0.2, 0.2, 0.62]) tube([x, 0.45, -1.55], [x, 0.9, -1.55]);
-  for (const x of [-0.62, 0.62]) tube([x, 0.7, -1.55], [x, 0.7, -1.38]);
-  const m = (geos, mt) => { const me = new THREE.Mesh(mergeGeometries(geos.map((g) => g.index ? g.toNonIndexed() : g)), mt); CAR.g.add(me); return me; };
-  m(white, mat(6)); m(dark, mat(4, [0.025, 0.025, 0.03], 'tyre'));
-  m(orange, mat(4, [0.62, 0.34, 0.08], 'bonnet')); m(blue, mat(4, [0.03, 0.12, 0.42], 'stripe')); m(chrome, mat(4, [0.42, 0.43, 0.45], 'tube'));
-  m([box(-0.62, 0.72, -1.42, -0.42, 0.82, -1.40), box(0.42, 0.72, -1.42, 0.62, 0.82, -1.40)], mat(4, [5.0, 5.0, 4.6], 'head'));
-  m([box(-0.62, 1.1, 1.35, -0.45, 1.2, 1.37), box(0.45, 1.1, 1.35, 0.62, 1.2, 1.37)], mat(4, [4.0, 0.3, 0.2], 'tail'));
-  m([box(-0.12, 1.235, -0.12, 0.12, 1.245, 0.02)], mat(4, [0.4, 1.2, 1.6], 'gauge'));
+  const RB = (sx, sy, sz, r, cx, cy, cz) => { const g = new RoundedBoxGeometry(sx, sy, sz, 3, Math.min(r, sx / 2 - 1e-3, sy / 2 - 1e-3, sz / 2 - 1e-3)); g.translate(cx, cy, cz); return g; };
+  const BX = (x0, y0, z0, x1, y1, z1) => { const b = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0); b.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2); return b; };
+  const CY = (r0, r1, h, seg, axis, cx, cy, cz) => { const c = new THREE.CylinderGeometry(r0, r1, h, seg); if (axis === 'x') c.rotateZ(Math.PI / 2); if (axis === 'z') c.rotateX(Math.PI / 2); c.translate(cx, cy, cz); return c; };
+  const TB = (pts, r) => new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map((p) => new V3(...p)), false, 'catmullrom', 0.2), pts.length * 12, r, 10, false);
+  const P = { white: [], orange: [], blue: [], plastic: [], rubber: [], metal: [], steel: [], seat: [], glowW: [], glowR: [], glowA: [], gauge: [] };
+  const H = { plastic: [], seat: [], white: [], glowA: [] };   // the parts left out while you drive
+  // the frame and body
+  P.steel.push(BX(-0.6, 0.24, -1.5, 0.6, 0.42, 1.45));
+  P.white.push(RB(1.42, 0.5, 2.85, 0.07, 0, 0.68, -0.02));
+  P.white.push(RB(1.44, 0.12, 1.15, 0.04, 0, 0.99, 0.82));                                   // the deck the seat stands on
+  P.blue.push(BX(-0.716, 0.56, -1.38, -0.706, 0.64, 1.34), BX(0.706, 0.56, -1.38, 0.716, 0.64, 1.34));
+  // bonnet: orange, rounded, a grille in its nose, a lip where it meets the body
+  P.orange.push(RB(1.38, 0.34, 1.32, 0.11, 0, 1.1, -0.78));
+  P.plastic.push(BX(-0.69, 0.92, -1.45, 0.69, 0.95, -0.12));
+  for (let k = 0; k < 7; k++) P.plastic.push(BX(-0.42, 0.98 + k * 0.03, -1.445, 0.42, 0.995 + k * 0.03, -1.43));
+  // fenders over the wheels
+  for (const sx of [-1, 1]) for (const sz of [-0.95, 0.95]) { const f = new THREE.TorusGeometry(0.44, 0.045, 8, 28, Math.PI); f.scale(1, 1, 2.6); f.rotateY(Math.PI / 2); f.translate(sx * 0.66, 0.38, sz); P.plastic.push(f); }
+  // headlamps (round, chromed rims), indicators, tail lamps, reflectors
+  for (const sx of [-1, 1]) {
+    P.metal.push(CY(0.085, 0.085, 0.06, 20, 'z', sx * 0.5, 0.78, -1.44)); P.glowW.push(CY(0.068, 0.068, 0.02, 20, 'z', sx * 0.5, 0.78, -1.475));
+    P.glowA.push(BX(sx * 0.62 - 0.05, 0.86, -1.452, sx * 0.62 + 0.05, 0.9, -1.44));
+    P.metal.push(BX(sx * 0.5 - 0.09, 0.82, 1.41, sx * 0.5 + 0.09, 0.92, 1.43)); P.glowR.push(BX(sx * 0.5 - 0.075, 0.835, 1.43, sx * 0.5 + 0.075, 0.905, 1.436));
+  }
+  // the bumper: bent tube
+  P.metal.push(TB([[-0.62, 0.48, -1.42], [-0.64, 0.5, -1.58], [-0.4, 0.5, -1.64], [0.4, 0.5, -1.64], [0.64, 0.5, -1.58], [0.62, 0.48, -1.42]], 0.032));
+  P.metal.push(TB([[-0.62, 0.82, -1.42], [-0.64, 0.84, -1.58], [-0.4, 0.84, -1.64], [0.4, 0.84, -1.64], [0.64, 0.84, -1.58], [0.62, 0.82, -1.42]], 0.028));
+  for (const x of [-0.42, -0.14, 0.14, 0.42]) P.metal.push(CY(0.022, 0.022, 0.34, 10, 'y', x, 0.67, -1.64));
+  // mirrors on arms at the front corners of the bonnet, low enough to keep out of the way
+  for (const sx of [-1, 1]) { P.plastic.push(TB([[sx * 0.66, 1.2, -1.2], [sx * 0.82, 1.24, -1.22], [sx * 0.9, 1.28, -1.2]], 0.012)); P.plastic.push(RB(0.06, 0.14, 0.1, 0.02, sx * 0.93, 1.3, -1.2)); }
+  // the step plate, the floor of the cab, the dash and its gauges, the steering column and wheel (kept low)
+  P.metal.push(BX(-0.74, 0.62, 0.15, -0.71, 0.66, 0.75), BX(0.71, 0.62, 0.15, 0.74, 0.66, 0.75));
+  P.rubber.push(BX(-0.6, 1.05, 0.05, 0.6, 1.06, 1.25));
+  P.plastic.push(RB(0.9, 0.16, 0.2, 0.05, 0, 1.17, -0.06));
+  for (const x of [-0.24, 0.24]) { P.metal.push(CY(0.045, 0.045, 0.02, 18, 'z', x, 1.18, -0.162)); P.gauge.push(CY(0.036, 0.036, 0.01, 18, 'z', x, 1.18, -0.173)); }
+  P.steel.push(CY(0.03, 0.03, 0.42, 10, 'y', 0, 1.2, 0.1).rotateX(0));
+  { const sw = new THREE.TorusGeometry(0.17, 0.018, 10, 32); sw.rotateX(-1.25); sw.translate(0, 1.3, 0.26); P.plastic.push(sw);
+    for (let k = 0; k < 3; k++) { const a = k / 3 * Math.PI * 2, s = new THREE.CylinderGeometry(0.01, 0.01, 0.16, 6); s.rotateZ(Math.PI / 2); s.rotateY(a); s.rotateX(-1.25); s.translate(0, 1.3, 0.26); P.plastic.push(s); } }
+  // the seat: cushion and bolsters (always), back and headrest (left out while you drive)
+  P.seat.push(RB(0.56, 0.12, 0.5, 0.05, 0, 1.12, 0.6), RB(0.07, 0.1, 0.46, 0.03, -0.29, 1.17, 0.6), RB(0.07, 0.1, 0.46, 0.03, 0.29, 1.17, 0.6));
+  H.seat.push(RB(0.54, 0.55, 0.1, 0.05, 0, 1.47, 0.9), RB(0.3, 0.16, 0.08, 0.04, 0, 1.84, 0.92));
+  // back panel with the tow hitch below it, and the beacon on its mast
+  H.white.push(RB(1.4, 0.32, 0.12, 0.03, 0, 1.18, 1.35));
+  P.steel.push(BX(-0.12, 0.42, 1.43, 0.12, 0.56, 1.62), CY(0.03, 0.03, 0.2, 10, 'y', 0, 0.5, 1.56));
+  H.plastic.push(CY(0.018, 0.018, 0.5, 8, 'y', 0.58, 1.6, 1.3)); H.glowA.push(CY(0.06, 0.07, 0.12, 16, 'y', 0.58, 1.9, 1.3));
+  const m = (geos, mt, parent) => { if (!geos.length) return null; const me = new THREE.Mesh(mergeGeometries(geos.map((g) => { g = g.index ? g.toNonIndexed() : g; for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv') g.deleteAttribute(k); if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2)); return g; })), mt); (parent || CAR.g).add(me); return me; };
+  const MT = { white: mat(8, [0.80, 0.81, 0.82], 'paintW'), orange: mat(8, [0.78, 0.36, 0.06], 'paintO'), blue: mat(8, [0.03, 0.13, 0.48], 'paintB'), plastic: mat(11), rubber: mat(9), metal: mat(10), steel: mat(11, [0, 0, 0], 'steel'), seat: mat(11, [0, 0, 0], 'seat'),
+    glowW: mat(4, [6.0, 6.0, 5.4], 'head2'), glowR: mat(4, [3.5, 0.25, 0.15], 'tail2'), glowA: mat(4, [3.8, 1.8, 0.2], 'amber'), gauge: mat(4, [0.4, 1.1, 1.5], 'gauge2') };
+  for (const k of Object.keys(P)) m(P[k], MT[k]);
+  CAR.hide = new THREE.Group(); CAR.g.add(CAR.hide); for (const k of Object.keys(H)) m(H[k], MT[k], CAR.hide);
+  // the wheels: treaded tyres (turned on a lathe), steel rims with five studs, a hub cap; each its own piece so it can roll and steer
+  const prof = []; for (let k = 0; k <= 16; k++) { const a = -Math.PI / 2 + k / 16 * Math.PI; prof.push(new THREE.Vector2(0.29 + 0.07 * Math.cos(a), 0.12 * Math.sin(a))); }
+  prof.unshift(new THREE.Vector2(0.2, -0.12)); prof.push(new THREE.Vector2(0.2, 0.12));
+  const tyre = new THREE.LatheGeometry(prof, 48); tyre.rotateZ(Math.PI / 2);
+  for (const sx of [-1, 1]) for (const sz of [-0.95, 0.95]) {
+    const piv = new THREE.Group(); piv.position.set(sx * 0.66, 0.36, sz); CAR.g.add(piv);
+    const spin = new THREE.Group(); piv.add(spin);
+    spin.add(new THREE.Mesh(tyre, MT.rubber));
+    const rim = []; rim.push(CY(0.205, 0.205, 0.2, 28, 'x', 0, 0, 0)); rim.push(CY(0.09, 0.11, 0.04, 20, 'x', sx * 0.11, 0, 0));
+    for (let k = 0; k < 5; k++) { const a = k / 5 * Math.PI * 2; rim.push(CY(0.014, 0.014, 0.03, 8, 'x', sx * 0.125, Math.cos(a) * 0.06, Math.sin(a) * 0.06)); }
+    m(rim, MT.metal, spin);
+    CAR.wheels.push({ piv, spin, front: sz < 0 });
+  }
+  // the shadow it throws on the floor (soft, darkest under the middle)
+  { const cv = document.createElement('canvas'); cv.width = cv.height = 128; const c2 = cv.getContext('2d'), gr = c2.createRadialGradient(64, 64, 8, 64, 64, 64); gr.addColorStop(0, 'rgba(0,0,0,0.85)'); gr.addColorStop(0.6, 'rgba(0,0,0,0.45)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); c2.fillStyle = gr; c2.fillRect(0, 0, 128, 128);
+    const sg = new THREE.PlaneGeometry(2.0, 3.6); sg.rotateX(-Math.PI / 2); sg.translate(0, 0.012, 0); const sm = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthWrite: false })); CAR.g.add(sm); }
   CAR.g.position.set(CAR.x, 0, CAR.z); scene.add(CAR.g);
 }
 const carUI = document.createElement('div');
@@ -902,6 +965,9 @@ function drive(dt) {
 }
 function carFrame(dt) {
   CAR.g.position.set(CAR.x, 0, CAR.z); CAR.g.rotation.y = CAR.yaw;
+  // the wheels roll with the speed, the front ones turn with the steering; and the parts behind your head are left out while you drive
+  for (const w of CAR.wheels) { w.spin.rotation.x -= CAR.v * dt / 0.36; if (w.front) w.piv.rotation.y = CAR.steer * 0.5 / (1 + Math.abs(CAR.v) / 60); }
+  CAR.hide.visible = !CAR.on;
   // the view pulls wider the faster you go
   const f = 72 + 16 * clamp(CAR.v / CAR_MAX, 0, 1); if (Math.abs(f - CAR.fov) > 0.05) { CAR.fov = f; camera.fov = f; camera.updateProjectionMatrix(); }
   CAR.hintT = Math.max(0, CAR.hintT - dt);
