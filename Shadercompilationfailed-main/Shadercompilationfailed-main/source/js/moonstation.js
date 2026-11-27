@@ -97,6 +97,58 @@ ${NOISE}${LIGHT}
 uniform vec3 uBase;
 varying vec3 vW; varying vec3 vN; varying vec4 vR; varying vec2 vUv2;
 float lines(float v, float period, float w){ float f = abs(fract(v / period + 0.5) - 0.5) * period; float aa = fwidth(v) * 1.2; return 1.0 - smoothstep(w - aa, w + aa, f); }
+#if KIND == 2
+// the rock: numbers for it that stay good however far along the cliff you are, noise that knows its own slope, and blocks with cracks between
+varying float vAO;
+vec2 rh2(vec2 p){ p = mod(p, 2048.0); vec3 q = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973)); q += dot(q, q.yzx + 33.33); return fract((q.xx + q.yz) * q.zy); }
+float rh1(vec2 p){ p = mod(p, 2048.0); vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
+vec3 gnoise(vec2 p){   // x: the value (about -0.7 .. 0.7); yz: which way it rises
+  vec2 i = floor(p), f = fract(p), u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0), du = 30.0 * f * f * (f * (f - 2.0) + 1.0);
+  vec2 ga = rh2(i) * 2.0 - 1.0, gb = rh2(i + vec2(1.0, 0.0)) * 2.0 - 1.0, gc = rh2(i + vec2(0.0, 1.0)) * 2.0 - 1.0, gd = rh2(i + vec2(1.0, 1.0)) * 2.0 - 1.0;
+  float va = dot(ga, f), vb = dot(gb, f - vec2(1.0, 0.0)), vc = dot(gc, f - vec2(0.0, 1.0)), vd = dot(gd, f - vec2(1.0, 1.0));
+  return vec3(va + u.x * (vb - va) + u.y * (vc - va) + u.x * u.y * (va - vb - vc + vd),
+              ga + u.x * (gb - ga) + u.y * (gc - ga) + u.x * u.y * (ga - gb - gc + gd) + du * (u.yx * (va - vb - vc + vd) + vec2(vb, vc) - va));
+}
+vec2 rG; float rTone, rDark, rShd;   // what the rock's layers add up: its lean (along the cliff, and up), its shade, the black of its cracks, shadow
+// one thickness of beds, each bed broken into blocks by joints. Every block stands out of the face or back in it by its own amount, leans its own
+// way, and has its own shade; where one stands out past the next its edge catches the light from the open end, and the other side lies in its shadow
+void beds(vec2 u, float T, float sd, float px){
+  float kk = 1.0 - smoothstep(0.14, 0.42, px / T); if (kk <= 0.0) return;
+  vec3 wv = gnoise(u / (T * 3.3) + sd * 1.7), wu = gnoise(u / (T * 0.83) + sd * 4.3);   // nothing in it is straight
+  float s = (u.y + 0.05 * u.x + wv.x * T * 0.6 + wu.x * T * 0.16) / T + sd * 3.71, zz = (u.x + wv.y * T * 0.45 + wu.y * T * 0.10) / T;
+  float i = floor(s), f = s - i, b = 0.5 + 0.64 * (rh1(vec2(i, sd)) - 0.5), bed = i + step(b, f);
+  float lo = bed - 0.5 + 0.64 * (rh1(vec2(bed - 1.0, sd)) - 0.5), hi = bed + 0.5 + 0.64 * (rh1(vec2(bed, sd)) - 0.5);
+  float dLo = (s - lo) * T, dHi = (hi - s) * T;                               // metres to the bedding planes under it and over it
+  vec2 hb = rh2(vec2(bed, sd + 5.0)), hb2 = rh2(vec2(bed, sd + 11.0));
+  float asp = 0.8 + 3.4 * hb.x * hb.x;                                        // long blocks in this bed, or short ones
+  float x = (zz + (s - bed) * (hb.y - 0.5) * 0.5) / asp + hb2.x * 7.0, sj = bed * 0.37 + sd * 13.0;   // the joints lean, each bed's its own way
+  float j = floor(x), fx = x - j, c = 0.5 + 0.64 * (rh1(vec2(j, sj)) - 0.5), blk = j + step(c, fx);
+  float l = blk - 0.5 + 0.64 * (rh1(vec2(blk - 1.0, sj)) - 0.5), r = blk + 0.5 + 0.64 * (rh1(vec2(blk, sj)) - 0.5);
+  float dL = (x - l) * asp * T, dR = (r - x) * asp * T;                       // metres to the joints either side; L is the side the light comes from
+  vec2 id = vec2(blk, sj + 3.3); vec2 h0 = rh2(id), h1 = rh2(id + 31.7);
+  float oL = rh2(id - vec2(1.0, 0.0)).x, oR = rh2(id + vec2(1.0, 0.0)).x, out0 = h0.x + hb2.y;   // how far out: the block's own, and its bed's
+  float oUp = rh2(vec2(bed + 1.0, sd + 11.0)).y, oDn = rh2(vec2(bed - 1.0, sd + 11.0)).y;
+  float stL = h0.x - oL, stR = h0.x - oR, stU = hb2.y - oUp, stD = hb2.y - oDn;
+  float e = px * 0.8, em = mix(1.0, 0.35, smoothstep(12.0, 200.0, T / px));   // the big ones go quiet as you come close, and leave the small ones to speak
+  // cracks: the joints, and the bedding planes (never thinner than a pixel; fainter instead)
+  float cw = T * 0.014, cx = max(cw, e), jl = 0.35 + 0.65 * h1.y;
+  rDark += kk * em * min(1.0, cw / cx) * max((1.0 - smoothstep(cx * 0.4, cx, min(dL, dR))) * jl, (1.0 - smoothstep(cx * 0.4, cx, min(dLo, dHi))) * (0.4 + 0.6 * hb.y));
+  // shadow: from the block next to it on the light's side, if that one stands further out; and under a bed that overhangs this one
+  float sw = max(-stL, 0.0) * T * 1.3, su = max(-stU, 0.0) * T * 0.7;
+  rShd += kk * em * max((1.0 - smoothstep(sw * 0.5, sw + e, dL)) * step(0.02, -stL), (1.0 - smoothstep(su * 0.3, su + e, dHi)) * step(0.02, -stU) * 0.8);
+  // its edges, broken back: the one toward the light shines, the far one is dark; more so the further it stands out past its neighbour
+  float bw = T * 0.09, fb = kk * (1.0 - smoothstep(0.3, 0.9, px / bw));
+  float bL = 1.0 - smoothstep(0.0, bw * (0.5 + 2.0 * max(stL, 0.0)), dL), bR = 1.0 - smoothstep(0.0, bw * (0.5 + 2.0 * max(stR, 0.0)), dR);
+  float bU = 1.0 - smoothstep(0.0, bw, dHi), bD = 1.0 - smoothstep(0.0, bw * (0.5 + 2.0 * max(stD, 0.0)), dLo);
+  rG += vec2(-bL * bL * (0.5 + 2.2 * max(stL, 0.0)) + bR * bR * (0.5 + 2.2 * max(stR, 0.0)), bU * bU * 0.8 - bD * bD * (0.4 + 1.2 * max(stD, 0.0))) * fb;
+  // a thin pale line where an edge stands clear (chipped, and the dust on it), for when the edge itself is too small to see
+  float rw = max(T * 0.02, e), rl = min(1.0, T * 0.02 / rw);
+  rTone += kk * rl * 0.5 * max((1.0 - smoothstep(rw * 0.5, rw, dL)) * smoothstep(0.05, 0.4, stL), (1.0 - smoothstep(rw * 0.5, rw, dLo)) * smoothstep(0.05, 0.4, stD) * 0.7);
+  // the block's own lean and shade, and its bed's
+  rG += (h1 - 0.5) * 0.52 * kk * mix(1.0, 0.6, smoothstep(12.0, 200.0, T / px));
+  rTone += ((h0.y - 0.5) * 0.20 + (out0 - 1.0) * 0.12 + (hb.y - 0.5) * 0.24) * kk;
+}
+#endif
 void main(){
   #include <logdepthbuf_fragment>
   vec3 n = normalize(vN); if (dot(n, uCam - vW) < 0.0) n = -n;
@@ -112,11 +164,48 @@ void main(){
   vec3 alb = vec3(0.028, 0.033, 0.040) * (0.8 + 0.4 * fbm3(vW * 0.002)) * (1.0 - 0.5 * g);
   col = shade(vW, n, alb, 0.75, 0.05);
 #elif KIND == 2
-  // the cliff: bare dark rock, rough at every size
-  float aa = clamp(1.0 - fwidth(vW.x) * 0.02, 0.0, 1.0);
-  float r = fbm(vW * 0.0011) * 0.6 + fbm3(vW * 0.0045) * 0.4 * aa + noise3(vW * 0.02) * 0.25 * clamp(1.0 - fwidth(vW.x) * 0.06, 0.0, 1.0);
-  vec3 alb = mix(vec3(0.030, 0.028, 0.026), vec3(0.085, 0.080, 0.072), r);
-  col = shade(vW, n, alb, 0.85, 0.08);
+  // the cliff: bare dark rock. Nothing here is soft: it is broken into blocks, the blocks into smaller blocks and those again, each one
+  // tilted its own way with a crack round it; it lies in beds, some of them standing out as ledges; it is worn into flutes running down it;
+  // and what is too small for a pixel from where you stand is left out, so twelve kilometres off it is still sharp, and so it is at arm's length
+  vec2 u = vW.zy;
+  float px = length(fwidth(vW)) * 0.7 + 1e-4;                       // metres to a pixel, here
+  float face = n.x > 0.0 ? 1.0 : -1.0;                              // the hall's side of it, or the outside
+  rG = vec2(0.0); rTone = 0.0; rDark = 0.0; rShd = 0.0;
+  // slow changes across the whole of it, and a wander to put on everything else so that nothing runs straight
+  vec3 w1 = gnoise(u / 2600.0 + 3.7), w2 = gnoise(u / 640.0 + 11.3), w3 = gnoise(u / 640.0 + 41.9);
+  rTone += w1.x * 0.30 + w2.x * 0.16;
+  vec2 uw = u + vec2(w2.x, w3.x) * 110.0 + vec2(w1.x, -w1.x) * 260.0;
+  // beds and blocks, six sizes of them: from a third of a kilometre thick down to a step
+  { float T = 340.0; for (int k = 0; k < 6; k++){ beds(uw, T, 1.0 + float(k) * 2.0, px); T *= 0.3; } }
+  // worn: flutes and ribs running down the face, creased, at every size; whatever is just big enough to see is what stands out most
+  { mat2 R = mat2(1.0, 0.0, 0.0, 1.0); const mat2 M = mat2(0.8, 0.6, -0.6, 0.8); vec2 A = vec2(1.0, 0.40), q = uw * A / 260.0 + 5.3; float lam = 260.0, hs = 0.0, an = 0.0;
+    for (int k = 0; k < 14; k++){
+      float kk = 1.0 - smoothstep(0.16, 0.45, px / lam); if (kk <= 0.0) break;
+      kk *= mix(1.0, 0.14, smoothstep(6.0, 80.0, lam / px));
+      vec3 nn = gnoise(q); float r = 1.0 - min(abs(nn.x) * 1.7, 1.0);
+      hs += (r * r - 0.3) * kk; an += kk;
+      rG += (nn.yz * R) * A * (2.0 * r * 1.7 * sign(nn.x) * 0.13) * kk;
+      q = M * q * 1.93; R = M * R; lam /= 1.93;
+    }
+    rTone += hs / max(an, 1.0) * 0.55;
+  }
+  vec2 g = rG; float tone = rTone, dark = rDark;
+  // stains run down it
+  tone += gnoise(vec2(u.x / 46.0, u.y / 1100.0) + 2.2).x * 0.22 * (1.0 - smoothstep(0.1, 0.4, px / 46.0))
+        + gnoise(vec2(u.x / 9.0, u.y / 330.0) + 8.1).x * 0.14 * (1.0 - smoothstep(0.1, 0.4, px / 9.0));
+  // and close to, its grain
+  { float k1 = 1.0 - smoothstep(0.12, 0.4, px / 0.30), k2 = 1.0 - smoothstep(0.12, 0.4, px / 0.06);
+    if (k1 > 0.0){ vec3 a = gnoise(u / 0.30 + 1.9); g += a.yz * 0.35 * k1; tone += a.x * 0.20 * k1; }
+    if (k2 > 0.0){ vec3 a = gnoise(u / 0.06 + 6.4); g += a.yz * 0.25 * k2; tone += a.x * 0.16 * k2; } }
+  // the hollows of the cliff's own shape sit in shade, its ridges stand a little clear
+  float cv = vAO * face, occ = 1.0 - 0.50 * smoothstep(0.0, 0.9, -cv) + 0.14 * smoothstep(0.0, 0.9, cv);
+  g /= 1.0 + 0.4 * length(g);
+  vec3 ez = normalize(vec3(0.0, 0.0, 1.0) - n * n.z + 1e-4), ey = normalize(vec3(0.0, 1.0, 0.0) - n * n.y + 1e-4);
+  vec3 nb = normalize(n + ez * g.x + ey * g.y);
+  vec3 alb = mix(vec3(0.022, 0.021, 0.020), vec3(0.098, 0.092, 0.083), clamp(0.52 + tone, 0.0, 1.0));
+  alb = mix(alb, vec3(0.105, 0.102, 0.098), smoothstep(0.30, 0.85, nb.y) * 0.55);      // dust lying where it can
+  alb *= (1.0 - 0.80 * clamp(dark, 0.0, 1.0)) * (1.0 - 0.62 * clamp(rShd, 0.0, 1.0)) * occ;
+  col = shade(vW, nb, alb, 0.88, 0.05);
 #elif KIND == 3
   // concrete: the back wall and the low wall at the end
   float g = max(lines(vW.x + 30.0, 60.0, 0.25), lines(vW.y, 30.0, 0.2));
@@ -203,7 +292,18 @@ const CZ1 = ZE - 1700;   // the rock runs on past the end of the floor, out into
   }
   // a slot at its foot where the platform runs out under it
   { const ix = g.index.array, keep = []; for (let t = 0; t < ix.length; t += 3) { let cut = true; for (let q = 0; q < 3; q++) { const v = ix[t + q], y = p.getY(v), z = p.getZ(v); if (!(y < 112 && z > PZ1 - 70 && z < ZE + 70)) cut = false; } if (!cut) keep.push(ix[t], ix[t + 1], ix[t + 2]); } g.setIndex(keep); }
-  g.computeVertexNormals(); add(g, mat(2));
+  // how far each point stands out of the rock round it (a ridge) or sits back in it (a hollow), near and wide: the shader shades by it
+  { const C = NZ + 1, Rr = NY + 1, H0 = new Float32Array(p.count); for (let i = 0; i < p.count; i++) H0[i] = p.getX(i);
+    const blur = (s, R) => { const t = new Float32Array(s.length), o = new Float32Array(s.length);
+      for (let j = 0; j < Rr; j++) for (let i = 0; i < C; i++) { let a = 0, c = 0; for (let k = -R; k <= R; k++) { const ii = i + k; if (ii >= 0 && ii < C) { a += s[j * C + ii]; c++; } } t[j * C + i] = a / c; }
+      for (let j = 0; j < Rr; j++) for (let i = 0; i < C; i++) { let a = 0, c = 0; for (let k = -R; k <= R; k++) { const jj = j + k; if (jj >= 0 && jj < Rr) { a += t[jj * C + i]; c++; } } o[j * C + i] = a / c; }
+      return o; };
+    const b1 = blur(H0, 2), b2 = blur(H0, 9), ao = new Float32Array(p.count);
+    for (let i = 0; i < p.count; i++) ao[i] = clamp((H0[i] - b1[i]) / 38 * 0.55 + (H0[i] - b2[i]) / 170 * 0.6, -1, 1);
+    g.setAttribute('aAO', new THREE.BufferAttribute(ao, 1)); }
+  g.computeVertexNormals();
+  add(g, new THREE.ShaderMaterial({ uniforms: { uCam, uTime, uMirrorVP, uBase: { value: new V3() } }, defines: { KIND: 2 }, side: THREE.DoubleSide, fragmentShader: FRAG,
+    vertexShader: VERT.replace('uniform mat4 uMirrorVP;', 'uniform mat4 uMirrorVP; attribute float aAO; varying float vAO;').replace('void main(){', 'void main(){ vAO = aAO;') }));
 }
 
 /* ---------------- floor, walls ---------------- */
@@ -533,7 +633,10 @@ const OUT = { y: -700, sx: -10500, sz: -11000, cr: 1700 };   // the ground far b
 const SUN = new V3(-0.45, 0.62, 0.62).normalize();
 const outMat = (kind, base = [0, 0, 0]) => new THREE.ShaderMaterial({
   uniforms: { uCam, uBase: { value: new V3(...base) }, uSun: { value: SUN } }, side: THREE.DoubleSide, defines: { KIND: kind },
-  vertexShader: VERT.replace('uniform mat4 uMirrorVP;', 'uniform mat4 uMirrorVP; uniform vec3 uBase;'),
+  // (things set down many times over, like the station buildings, bring a place and size of their own with them)
+  vertexShader: VERT.replace('uniform mat4 uMirrorVP;', 'uniform mat4 uMirrorVP; uniform vec3 uBase;')
+    .replace('vec4 w = modelMatrix * vec4(position, 1.0);', '\n#ifdef USE_INSTANCING\n  mat4 mm = modelMatrix * instanceMatrix;\n#else\n  mat4 mm = modelMatrix;\n#endif\n  vec4 w = mm * vec4(position, 1.0);')
+    .replace('mat3(modelMatrix) * normal', 'mat3(mm) * normal'),
   fragmentShader: `#include <logdepthbuf_pars_fragment>
   ${NOISE}
   uniform vec3 uCam, uBase, uSun; varying vec3 vW; varying vec3 vN; varying vec4 vR;
@@ -586,7 +689,7 @@ const outMat = (kind, base = [0, 0, 0]) => new THREE.ShaderMaterial({
     // white built things: the platform, the stairs, the buildings
     vec3 alb = vec3(0.70, 0.71, 0.72);
     float sl = max(dot(n, uSun), 0.0);
-    col = alb * (vec3(1.0, 0.98, 0.95) * 1.1 * sl + vec3(0.07, 0.09, 0.13));
+    col = alb * (vec3(1.0, 0.98, 0.95) * 1.1 * sl + vec3(0.07, 0.09, 0.13) + vec3(0.13, 0.135, 0.15) * (0.5 - 0.5 * n.y));   // and a little back off the bright ground
   #elif KIND == 4
     // solar panels: deep blue cells in a fine grid, catching the sun as they turn
     vec2 u = abs(n.y) > 0.5 ? vW.xz : vW.xy;
@@ -654,24 +757,95 @@ function groundH(x, z) {
       white.push(box(x - w, y - 1.2, z - w, x + w, y, z + w));
       if (k % 6 === 0) metal.push(box(x - 4, Math.min(groundH(x, z), y) - 2, z - 4, x + 4, y, z + 4)); }
   }
-  // buildings cut into the slope on the near side, terrace above terrace, a few windows lit
+  // The buildings. Two kinds, each modelled once (about 130 m long, in metres) and then set down again and again, every one at its own
+  // size and turned its own way: on the near slope above the crater, terrace above terrace; and in small groups on and on into the distance.
+  // Each stands on a bench of panelled metal sunk into the ground, so it sits level on a slope.
+  //   the hab: a long white hull lying on its side on saddles, hooped, an airlock out of its front with a lit door, a row of windows
+  //            (some lit), plant on its back, a mast with a dish and a lamp at the top, whip aerials, two wings of solar panel behind
+  //   the lab: a dome on a drum with lit windows round its foot, joined by a tube to a stepped block with a long window, tanks behind,
+  //            a lattice tower on the roof carrying a big dish and a whip, a small dish beside it, an arched garage
   const r = mulberry32(55);
-  for (let k = 0; k < 26; k++) {
-    const a = 1.0 + r() * 1.6, rr = OUT.cr * (0.95 + r() * 0.5), x = OUT.sx + Math.cos(a) * rr, z = OUT.sz + Math.sin(a) * rr, y = groundH(x, z);
-    const w = 100 + r() * 220, d = 60 + r() * 120, hh = 40 + r() * 110;
-    white.push(box(x - w / 2, y - 10, z - d / 2, x + w / 2, y + hh, z + d / 2));
-    for (let q = 0; q < 3; q++) if (r() < 0.6) warm.push(box(x - w / 2 + 4 + q * (w - 8) / 3, y + hh * 0.35, z + d / 2, x - w / 2 + 4 + q * (w - 8) / 3 + (w - 8) / 4, y + hh * 0.6, z + d / 2 + 1.5));
+  const cylX = (rad, len, seg, x, y, z) => { const c = new THREE.CylinderGeometry(rad, rad, len, seg); c.rotateZ(Math.PI / 2); c.translate(x, y, z); return c; };
+  const cylY = (r0, r1, h, seg, x, y, z) => { const c = new THREE.CylinderGeometry(r1, r0, h, seg); c.translate(x, y + h / 2, z); return c; };   // r0 at its foot, r1 at its top
+  const ball = (rad, x, y, z, sx = 1) => { const s = new THREE.SphereGeometry(rad, 16, 8); s.scale(sx, 1, 1); s.translate(x, y, z); return s; };
+  // a dish: a bowl with its feed on a stalk, tipped over by `tilt` and turned to face `yaw`; K.w takes the bowl, K.m the feed
+  const dish = (K, rad, x, y, z, tilt, yaw) => {
+    const bowl = new THREE.SphereGeometry(rad * 1.6, 16, 4, 0, Math.PI * 2, 0, 0.675); bowl.rotateX(Math.PI); bowl.translate(0, rad * 1.6, 0);
+    const parts = [bowl, box(-rad * 0.035, 0, -rad * 0.035, rad * 0.035, rad * 0.8, rad * 0.035), box(-rad * 0.1, rad * 0.74, -rad * 0.1, rad * 0.1, rad * 0.9, rad * 0.1),
+      box(-rad * 0.07, -rad * 0.5, -rad * 0.07, rad * 0.07, 0.02 * rad, rad * 0.07)];
+    parts.forEach((g, i) => { g.rotateX(tilt); g.rotateY(yaw); g.translate(x, y, z); (i ? K.m : K.w).push(g); });
+  };
+  const HAB = { w: [], m: [], g: [], d: [], p: [] }, LAB = { w: [], m: [], g: [], d: [], p: [] };
+  {
+    const K = HAB;
+    K.m.push(box(-66, -40, -42, 66, 0, 38));                                                                    // the bench
+    K.w.push(cylX(20, 96, 18, 0, 27, 0), ball(20, -48, 27, 0, 0.5), ball(20, 48, 27, 0, 0.5));                   // the hull, and its rounded ends
+    for (const x of [-36, -12, 12, 36]) K.m.push(cylX(20.9, 2.4, 18, x, 27, 0));                                 // hoops
+    for (const x of [-34, 0, 34]) for (const z of [-12, 12]) K.m.push(box(x - 3, 0, z - 3, x + 3, 12.5, z + 3));  // saddles
+    K.w.push(box(-13, 0, 14, 13, 24, 34)); K.m.push(box(-15, 24, 13, 15, 26, 35.5));                             // the airlock, its roof
+    K.g.push(box(-5, 1, 34, 5, 17, 34.5)); K.d.push(box(-9.5, 1, 34, -7, 20, 34.3), box(7, 1, 34, 9.5, 20, 34.3));   // its door, lit
+    K.m.push(box(-7, 0, 34.5, 7, 1, 44));                                                                        // and the ramp up to it
+    [-40, -30, -20, 20, 30, 40].forEach((x, i) => (i % 3 === 1 ? K.d : K.g).push(box(x - 3, 28, 19.2, x + 3, 33, 20.2)));   // windows
+    K.m.push(box(-34, 46, -7, -14, 52, 7), box(-30, 52, -4, -26, 55, 4), box(-22, 52, -4, -18, 55, 4));          // plant on its back
+    K.w.push(cylY(5.5, 5, 6, 12, 4, 46, 0)); K.m.push(cylY(5.8, 5.8, 1, 12, 4, 52, 0));                          // a hatch
+    K.m.push(box(23.2, 46, -0.8, 24.8, 104, 0.8), box(18, 84, -0.5, 30, 85, 0.5), box(20, 94, -0.5, 28, 95, 0.5), box(21, 46, -3, 27, 49, 3));   // the mast
+    K.g.push(box(23.2, 104, -0.8, 24.8, 105.6, 0.8));
+    dish(K, 9, 24, 68, 2.5, 0.95, 0.5);
+    K.m.push(box(-42.4, 45, 3.6, -41.6, 84, 4.4), box(-39.4, 45, -4.4, -38.6, 71, -3.6), box(40.6, 44, -0.4, 41.4, 66, 0.4));   // whips
+    for (const x of [-36, 24]) {                                                                                 // solar wings behind
+      K.m.push(box(x - 1.5, 0, -31.5, x + 1.5, 17, -28.5), box(x - 16, 16, -30.6, x + 16, 17.4, -29.4));
+      const pn = new THREE.BoxGeometry(46, 1, 20); pn.rotateX(0.45); pn.translate(x, 19, -30); K.p.push(pn);
+    }
   }
-  // and outposts on and on: low blocks, panel walls, a light or two, smaller and further
+  {
+    const K = LAB;
+    K.m.push(box(-62, -40, -50, 62, 0, 52));                                                                    // the bench
+    K.w.push(cylY(33, 31, 9, 20, -24, 0, 0)); K.m.push(cylY(31.8, 31.8, 2, 20, -24, 8, 0));                      // the drum, a band round it
+    { const d = new THREE.SphereGeometry(30, 20, 7, 0, Math.PI * 2, 0, Math.PI / 2); d.translate(-24, 9.5, 0); K.w.push(d); }   // the dome
+    K.m.push(cylY(4.5, 3.5, 3, 12, -24, 39, 0), box(-24.5, 42, -0.5, -23.5, 56, 0.5)); K.g.push(box(-24.6, 56, -0.6, -23.4, 57.4, 0.6));
+    for (let k = -4; k <= 4; k++) { const a = k * 0.27, w = new THREE.BoxGeometry(5.2, 3.6, 1.2); w.rotateY(a); w.translate(-24 + Math.sin(a) * 32.2, 4.6, Math.cos(a) * 32.2); (k % 3 === 0 ? K.d : K.g).push(w); }
+    K.w.push(box(16, 0, -24, 56, 22, 24), box(21, 22, -19, 51, 31, 19)); K.m.push(box(15, 21, -25, 57, 23, 25), box(20, 30.4, -20, 52, 32, 20));   // the block, stepped
+    K.g.push(box(20, 9, 24, 36, 15, 24.5), box(24, 24.5, 19, 34, 28, 19.5)); K.d.push(box(39, 9, 24, 52, 15, 24.5), box(37, 24.5, 19, 48, 28, 19.5));
+    K.d.push(box(56, 2, -6, 56.4, 16, 6));
+    K.w.push(cylX(6, 14, 12, 12, 8, 0)); K.m.push(cylX(6.9, 1.5, 12, 7.5, 8, 0), cylX(6.9, 1.5, 12, 15.5, 8, 0));   // the tube between
+    for (const x of [26, 44]) { K.w.push(ball(8.5, x, 12, -37)); K.m.push(box(x - 5, 0, -42, x + 5, 5, -32)); }  // tanks
+    K.m.push(box(26, 11.4, -37.6, 44, 12.6, -36.4), box(34.4, 12, -37, 35.6, 20, -24));
+    { const tx = 36, y0 = 32, y1 = 98, h = 3.2;                                                                  // the tower
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) K.m.push(box(tx + sx * h - 0.45, y0, sz * h - 0.45, tx + sx * h + 0.45, y1, sz * h + 0.45));
+      for (let y = y0 + 11; y < y1 + 1; y += 11) K.m.push(box(tx - h, y, -h - 0.3, tx + h, y + 0.6, -h + 0.3), box(tx - h, y, h - 0.3, tx + h, y + 0.6, h + 0.3), box(tx - h - 0.3, y, -h, tx - h + 0.3, y + 0.6, h), box(tx + h - 0.3, y, -h, tx + h + 0.3, y + 0.6, h));
+      K.m.push(box(tx - 6, y1, -6, tx + 6, y1 + 1.2, 6), box(tx + 4.6, y1, 4.6, tx + 5.4, y1 + 34, 5.4)); K.g.push(box(tx + 4.4, y1 + 34, 4.4, tx + 5.6, y1 + 35.6, 5.6));
+      dish(K, 11, tx - 1, y1 + 7, 0, 0.8, -0.5); }
+    dish(K, 5, 25, 34.5, -12, 0.55, 2.4);
+    { const a = new THREE.CylinderGeometry(9, 9, 22, 12, 1, false, 0, Math.PI); a.rotateZ(Math.PI / 2); a.rotateY(Math.PI / 2); a.translate(-48, 0, 40); K.w.push(a); }   // the garage
+    K.d.push(box(-53, 0, 51, -43, 6.5, 51.3));
+  }
+  const KINDS = [HAB, LAB].map((K) => [[K.w, outMat(2)], [K.m, outMat(1)], [K.g, outMat(3, [3.2, 2.0, 0.9])], [K.d, outMat(3, [0.02, 0.026, 0.036])], [K.p, outMat(4)]]
+    .filter(([a]) => a.length).map(([a, m]) => [mergeGeometries(a), m]));
+  const placed = [[], []], spots = [], _q = new THREE.Quaternion(), _up = new V3(0, 1, 0);
+  // set one down: level on the slope (its bench takes up the difference), unless something already stands there
+  const setDown = (kind, x, z, s, yaw) => {
+    for (const [px, pz, pr] of spots) if (Math.hypot(x - px, z - pz) < (pr + 62 * s)) return false;
+    let lo = 1e9, hi = -1e9; for (const [ox, oz] of [[-60, -40], [60, -40], [-60, 40], [60, 40], [0, 0]]) { const c = Math.cos(yaw), sn = Math.sin(yaw), y = groundH(x + (c * ox + sn * oz) * s, z + (-sn * ox + c * oz) * s); lo = Math.min(lo, y); hi = Math.max(hi, y); }
+    if (hi - lo > 60 * s) return false;                                                                        // too steep here even for a bench
+    placed[kind].push(new THREE.Matrix4().compose(new V3(x, lo + (hi - lo) * 0.28 + 1.5 * s, z), _q.setFromAxisAngle(_up, yaw), new V3(s, s, s)));
+    spots.push([x, z, 62 * s]); return true;
+  };
+  for (const a of [2.1, 2.7, 3.6]) for (const q of [1.06, 0.97, 0.88]) spots.push([OUT.sx + Math.cos(a) * OUT.cr * q, OUT.sz + Math.sin(a) * OUT.cr * q, 45]);   // keep the heads of the stairs clear
+  // on the slope on the near side
+  for (let k = 0, tries = 0; k < 26 && tries < 600; tries++) {
+    const a = 1.0 + r() * 1.6, rr = OUT.cr * (0.95 + r() * 0.5), x = OUT.sx + Math.cos(a) * rr, z = OUT.sz + Math.sin(a) * rr;
+    if (setDown(r() < 0.55 ? 0 : 1, x, z, 0.8 + r() * 1.3, (r() - 0.5) * 1.4)) k++;
+  }
+  // and outposts on and on: a few of them together, a light or two, smaller and further
   const pts = [];
   for (let k = 0; k < 140; k++) {
     const a = r() * Math.PI * 2, dist = 1600 + Math.pow(r(), 0.7) * 40000, x = OUT.sx + Math.cos(a) * dist, z = OUT.sz + Math.sin(a) * dist - 4000, y = groundH(x, z);
     const s = 0.6 + r() * 1.8;
-    for (let q = 0; q < 2 + (r() * 4 | 0); q++) { const ox = (r() - 0.5) * 300 * s, oz = (r() - 0.5) * 300 * s, w = (20 + r() * 60) * s, hh = (8 + r() * 25) * s, yy = groundH(x + ox, z + oz);
-      (r() < 0.5 ? white : metal).push(box(x + ox - w / 2, yy - 6, z + oz - w / 3, x + ox + w / 2, yy + hh, z + oz + w / 3)); }
+    for (let q = 0, n = 2 + (r() * 4 | 0), tries = 0; q < n && tries < 30; tries++) if (setDown(r() < 0.5 ? 0 : 1, x + (r() - 0.5) * 420 * s, z + (r() - 0.5) * 420 * s, (0.3 + r() * 0.55) * s, r() * Math.PI * 2)) q++;
     pts.push(x, y + 30 * s, z);
     if (r() < 0.5) { const ex = x + (r() - 0.5) * 200, ez = z + (r() - 0.5) * 200; pts.push(ex, groundH(ex, ez) + 15, ez); }
   }
+  KINDS.forEach((parts, kind) => { for (const [geo, m] of parts) { const im = new THREE.InstancedMesh(geo, m, placed[kind].length); placed[kind].forEach((M, i) => im.setMatrixAt(i, M)); im.frustumCulled = false; scene.add(im); } });
   for (let k = 0; k < 60; k++) { const a = r() * 6.283, rr = r() * OUT.cr * 1.4, x = OUT.sx + Math.cos(a) * rr, z = OUT.sz + Math.sin(a) * rr; pts.push(x, groundH(x, z) + 6, z); }
   const add2 = (geos, m) => { if (!geos.length) return; const me = new THREE.Mesh(mergeGeometries(geos.map((g) => { g = g.index ? g.toNonIndexed() : g; if (g.attributes.uv) g.deleteAttribute('uv'); if (!g.attributes.normal) g.computeVertexNormals(); return g; })), m); me.frustumCulled = false; scene.add(me); };
   add2(metal, outMat(1)); add2(white, outMat(2)); add2(warm, outMat(3, [3.2, 2.0, 0.9]));
