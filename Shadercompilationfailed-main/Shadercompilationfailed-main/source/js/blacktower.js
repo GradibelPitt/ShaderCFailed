@@ -529,7 +529,7 @@ const FAR = { towers: null, sky: null };
 // Thousands of streaks in a box round you, falling hard and blown a little: down the shaft, through the light of the pods (red near the
 // wall), past the lamps, and outside beyond the openings; every flash lights all of them at once.
 {
-  const N = 16000, g = new THREE.InstancedBufferGeometry();
+  const N = 8000, g = new THREE.InstancedBufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute([-1, 0, 0, 1, 0, 0, 1, 1, 0, -1, 0, 0, 1, 1, 0, -1, 1, 0], 3));
   const seed = new Float32Array(N * 4); for (let i = 0; i < N * 4; i++) seed[i] = rnd();
   g.setAttribute('aS', new THREE.InstancedBufferAttribute(seed, 4)); g.instanceCount = N;
@@ -545,8 +545,8 @@ const FAR = { towers: null, sky: null };
       vec3 p = vec3(x, y, z); float len = 0.45 + aS.w * 0.55;
       vec3 side = normalize(cross(axis, normalize(c - p)));
       float d = length(c - p);
-      vec3 w = p + axis * len * position.y + side * position.x * (0.005 + d * 0.0009);
-      vW = w; vU = position.y; vK = aS.w;
+      vec3 w = p + axis * len * position.y + side * position.x * (0.0035 + d * 0.0006);
+      vW = w; vU = position.y; vK = aS.w * smoothstep(2.5, 6.0, d);   // (none close enough to stream across your eyes)
       gl_Position = projectionMatrix * viewMatrix * vec4(w, 1.0);
     }`,
     fragmentShader: COMMON + `varying vec3 vW; varying float vU, vK;
@@ -559,7 +559,7 @@ const FAR = { towers: null, sky: null };
         vec3 L = lp - vW; c += vec3(0.75, 0.86, 1.0) * 0.7 / (1.0 + dot(L, L) * 1.5); }
       c += vec3(0.6, 0.68, 1.0) * (uFlash * (outside ? 0.35 : 0.2 + 0.35 * nearWindow(a)) + uBolt * 0.15);
       float k = smoothstep(0.0, 0.25, vU) * smoothstep(1.0, 0.6, vU) * (0.5 + 0.5 * vK);
-      gl_FragColor = vec4(c * k * 0.55 * seeThrough(vW), 1.0);
+      gl_FragColor = vec4(c * k * 0.3 * seeThrough(vW), 1.0);
     }` });
   const rain = new THREE.Mesh(g, mat); rain.frustumCulled = false; rain.renderOrder = 5; scene.add(rain);
 }
@@ -706,9 +706,9 @@ function initAudio() {
       const white = mk((d2) => { for (let i = 0; i < n2; i++) d2[i] = Math.random() * 2 - 1; });
       const ticks = mk((d2) => { for (let i = 0; i < n2; i++) d2[i] = 0; for (let k = 0; k < sec * 2600; k++) { const at = Math.floor(Math.random() * (n2 - 300)), a2 = Math.random() * Math.random(); for (let j = 0; j < 300; j++) d2[at + j] += (Math.random() * 2 - 1) * a2 * Math.exp(-j / 40); } });
       const brown = mk((d2) => { let b3 = 0; for (let i = 0; i < n2; i++) { b3 = (b3 + 0.02 * (Math.random() * 2 - 1)) / 1.02; d2[i] = b3 * 4; } });
-      RAIN.roar = loop(white, 'lowpass', 900, 0.3, 0.16, 0.3);
-      RAIN.hiss = loop(white, 'highpass', 4500, 0.3, 0.035, 0);
-      RAIN.drum = loop(ticks, 'bandpass', 2600, 0.7, 0.5, 0.4);
+      RAIN.roar = loop(white, 'bandpass', 2200, 0.35, 0.1, 0.25);   // (kept above the sirens' range, so they come through it)
+      RAIN.hiss = loop(white, 'highpass', 5000, 0.3, 0.025, 0);
+      RAIN.drum = loop(ticks, 'bandpass', 3000, 0.8, 0.26, 0.25);
       RAIN.roll = loop(brown, 'lowpass', 90, 0.5, 0.5, 0.2);
     }
     sirenStart();
@@ -801,11 +801,11 @@ const SIRENS = [];
 function sirenStart() {
   for (const [delay, detune, level] of [[1.0, 1, 1], [9.5, 0.94, 0.7]]) {
     const S = { at: AC.currentTime + delay, oscs: [], detune };
-    const dist = AC.createBiquadFilter(); dist.type = 'lowpass'; dist.frequency.value = 780 * detune; dist.Q.value = 0.4;
+    const dist = AC.createBiquadFilter(); dist.type = 'lowpass'; dist.frequency.value = 1150 * detune; dist.Q.value = 0.4;
     const band = AC.createBiquadFilter(); band.type = 'highpass'; band.frequency.value = 110;
     const rot = AC.createGain(); rot.gain.value = 0.7; const lfo = AC.createOscillator(), lg = AC.createGain(); lfo.frequency.value = 0.17 + Math.random() * 0.07; lg.gain.value = 0.3; lfo.connect(lg); lg.connect(rot.gain); lfo.start();
     const env = AC.createGain(); env.gain.setValueAtTime(0.0001, S.at); env.gain.exponentialRampToValueAtTime(level, S.at + 5);
-    const dry = AC.createGain(); dry.gain.value = 0.04; const wet = AC.createGain(); wet.gain.value = 0.17;
+    const dry = AC.createGain(); dry.gain.value = 0.1; const wet = AC.createGain(); wet.gain.value = 0.26;
     dist.connect(band); band.connect(rot); rot.connect(env); env.connect(dry); env.connect(wet); dry.connect(out); wet.connect(verb);
     for (const [ratio, type, g0] of [[1, 'sawtooth', 0.5], [1.19, 'sawtooth', 0.42], [2, 'triangle', 0.18], [2.38, 'triangle', 0.12]]) {
       const o = AC.createOscillator(), g = AC.createGain(); o.type = type; g.gain.value = g0; o.frequency.setValueAtTime(140 * ratio * detune, AC.currentTime);
@@ -1054,7 +1054,7 @@ function frame(now) {
   sirenTick();
   { const nearW = Math.max(0, 1 - Math.abs(ang(camera.position.x, camera.position.z) - Math.PI) / 0.9);   // by the openings: the wind, and the rain pouring in
     if (wind) wind.gain.value += ((0.1 + 0.4 * nearW) - wind.gain.value) * Math.min(1, dt * 2);
-    if (RAIN.roar) { RAIN.roar.gain.value += ((0.16 + 0.22 * nearW) - RAIN.roar.gain.value) * Math.min(1, dt * 2); RAIN.hiss.gain.value = 0.035 + 0.06 * nearW; } }
+    if (RAIN.roar) { RAIN.roar.gain.value += ((0.1 + 0.12 * nearW) - RAIN.roar.gain.value) * Math.min(1, dt * 2); RAIN.hiss.gain.value = 0.025 + 0.035 * nearW; } }
   if (!NAME.on && fadeT > 2.4) { NAME.on = true; NAME.el.style.opacity = '1'; }
   if (!NAME.off && fadeT > 8.4) { NAME.off = true; NAME.el.style.opacity = '0'; }
   grade.uniforms.uTime.value = time; grade.uniforms.uFade.value = WOKE ? 0 : clamp(1 - (fadeT - 0.3) / 3.2, 0, 1);
