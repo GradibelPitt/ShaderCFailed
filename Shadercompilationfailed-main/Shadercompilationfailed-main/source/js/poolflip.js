@@ -1435,7 +1435,7 @@ function startTeleport() {
   if (leaving) return; leaving = performance.now();
   if (hum) { try { hum.g.gain.value = 0; } catch (e) {} }
   for (const L of lamps) { L.ra.intensity = L.sp.intensity = L.bounce.intensity = 0; L.p.material.color.setScalar(0); }
-  setTimeout(() => { location.href = 'level1.html'; }, 1600);
+  setTimeout(() => { (window.scfGo?scfGo('level1.html'):(location.href='level1.html')); }, 1600);
 }
 function updateDread(dt, now) {
   const wild = dread >= 3 && !leaving;

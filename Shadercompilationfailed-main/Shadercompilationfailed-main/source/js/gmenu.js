@@ -84,7 +84,7 @@
     root.addEventListener('click', (e) => e.stopPropagation());
     root.querySelector('#gmMain').onclick = () => {
       const b = root.querySelector('#gmMain');
-      if (performance.now() - leaveArmed < 3000) { location.href = 'index.html'; return; }
+      if (performance.now() - leaveArmed < 3000) { (window.scfGo?scfGo('index.html'):(location.href='index.html')); return; }
       leaveArmed = performance.now(); b.classList.add('armed'); b.textContent = 'Click again to leave';
       setTimeout(() => { if (performance.now() - leaveArmed >= 2900) { b.classList.remove('armed'); b.innerHTML = '&larr; Main menu'; } }, 3000);
     };
@@ -93,7 +93,7 @@
       const b = root.querySelector('#gmHub');
       if (!hubSeen()) { b.classList.remove('no'); void b.offsetWidth; b.classList.add('no'); return; }
       if (typeof G !== 'undefined' && G.mode === 'hub') { setOpen(false); return; }   // already there
-      location.href = 'hub.html';
+      (window.scfGo?scfGo('hub.html'):(location.href='hub.html'));
     };
   }
   const hubSeen = () => !!(window.SCF_SAVE && (SCF_SAVE.get('hubSeen') || SCF_SAVE.get('pcPower') || SCF_SAVE.get('allLevels')));
@@ -128,7 +128,7 @@
         + '<p class="note">Only this save. The size gun, the power strip, the air pump and the inflatable rocket, all in your hands (scroll to switch). Turned off, it takes back only what it gave.</p></div>'
         + '<p class="close">This save only &middot; <kbd class="gk">G</kbd> close</p>';
       body.querySelector('#gmAll').onchange = (e) => {
-        if (window.SCF_SAVE) SCF_SAVE.set('allLevels', !!e.target.checked);
+        if (window.SCF_SAVE) { SCF_SAVE.set('allLevels', !!e.target.checked); if (e.target.checked) SCF_SAVE.set('adminUsed', true); }   // (adminUsed stays: some achievements do not count after it)
         hubButton(); if (typeof hubRows === 'function') hubRows();   // standing in the hall: the screen changes now
       };
       body.querySelector('#gmItems').onchange = (e) => allItems(!!e.target.checked);

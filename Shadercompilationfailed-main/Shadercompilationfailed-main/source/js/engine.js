@@ -106,10 +106,10 @@ const Snd={ctx:null,master:null,echo:null,timer:0,
     if(this.ctx)return;
     try{
       const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;
-      const c=this.ctx=new AC();this.master=c.createGain();this.master.gain.value=0.9;this.master.connect(c.destination);
+      const c=this.ctx=new AC();this.master=c.createGain();this.master.gain.value=this.mute?0:0.9;this.master.connect(c.destination);
       const dl=c.createDelay(1),fb=c.createGain(),lp=c.createBiquadFilter();dl.delayTime.value=0.43;fb.gain.value=0.42;lp.type='lowpass';lp.frequency.value=2200;
       dl.connect(lp);lp.connect(fb);fb.connect(dl);dl.connect(this.master);this.echo=dl;
-      const pad=c.createGain();pad.gain.value=0.05;this.pad=pad;const f=c.createBiquadFilter();f.type='lowpass';f.frequency.value=420;pad.connect(f);f.connect(this.master);
+      const pad=c.createGain();pad.gain.value=this.mute?0:0.05;this.pad=pad;const f=c.createBiquadFilter();f.type='lowpass';f.frequency.value=420;pad.connect(f);f.connect(this.master); // (silenced before the sound had even started, e.g. straight down into the pool: it starts silent)
       [98,146.83,196.6,233.08,293.9].forEach((hz,i)=>{const o=c.createOscillator(),g=c.createGain(),l=c.createOscillator(),lg=c.createGain();
         o.type=i%2?'triangle':'sine';o.frequency.value=hz;g.gain.value=0.5;l.frequency.value=0.05+i*0.027;lg.gain.value=0.45;l.connect(lg);lg.connect(g.gain);o.connect(g);g.connect(pad);o.start();l.start();});
       const bell=()=>{if(this.ctx&&this.ctx.state==='running'&&!this.mute){const sc=[440,493.88,554.37,659.25,739.99,880,987.77];
@@ -272,7 +272,7 @@ function frame(ms){
   if(G.mode==='pool')return; // the inverted pool (js/poolflip.js) has taken over the screen: this loop stops
   const now=ms/1000;let dt=now-last;last=now;if(!(dt>0))dt=0.016;
   // keep the frame rate up: drop resolution when frames run long, win it back slowly when there is headroom
-  if(dt<0.25){avgDt+=(dt-avgDt)*0.08;
+  if(dt<0.25&&!(window.SCF_LOADING&&SCF_LOADING.active)){avgDt+=(dt-avgDt)*0.08;
     if(avgDt>0.0195&&renderScale>0.5){if(++slow>30&&G.kuw!==0&&G.print>0.5){G.kuw=0;slow=0;}else if(slow>30){scaleCap=Math.max(0.5,renderScale*0.97);renderScale=Math.max(0.5,renderScale*0.86);slow=0;fast=0;}}else if(slow>0)slow--;
     if(avgDt<0.0175&&renderScale<scaleCap){if(++fast>360){renderScale=Math.min(scaleCap,renderScale*1.05);fast=0;}}else fast=0;}
   dt=Math.min(dt,0.05);G.clock+=dt;

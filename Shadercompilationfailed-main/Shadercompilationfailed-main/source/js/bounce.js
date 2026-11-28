@@ -846,7 +846,7 @@ function updateAir(dt) {
   if (fail < 0) {
     inside += dt;
     const mid = COLS * CELL / 2, past = entry === 0 ? p.x < mid - 0.5 : p.x > mid + 0.5;
-    if (past && inside > 6 && p.x > 0 && p.x < COLS * CELL && !SV().get('castleFixed')) powerCut();
+    if (past && inside > 6 && p.x > 0 && p.x < COLS * CELL) powerCut();   // every time: the air pump cannot save it (it is only for the rocket)
     return 0;
   }
   fail += dt;
@@ -926,7 +926,7 @@ function hideRocket() {
 }
 const SV = () => window.SCF_SAVE || { get: () => undefined, set() {} };
 const EQ = () => window.Equip;
-// E: the rocket if you are looking at it, otherwise the pump (if it is in your hand) on the castle itself
+// E: the rocket, if you are looking at it (the air pump is only for that: it does nothing for the castle, which still comes down)
 function rocketAimed() {
   if (rocket.gone) return false; const c = camera.position; camera.getWorldDirection(_rd);
   const dx = rocket.x - c.x, dz = rocket.z - c.z, dh = Math.hypot(dx, dz); if (dh > 1.25) return false;
@@ -934,11 +934,6 @@ function rocketAimed() {
   return (dx * _rd.x + dy * _rd.y + dz * _rd.z) / d > 0.55;
 }
 const _rd = new THREE.Vector3();
-function pumpUp(quiet) {   // the castle is full again and stays full
-  const was = SV().get('castleFixed'); SV().set('castleFixed', true);
-  if (fail >= 0) inflate(); if (!quiet) whoosh();
-  return !was;
-}
 function whoosh() {   // air going in: the pump's strokes
   if (!AC || AC.state !== 'running') return; const t0 = AC.currentTime;
   for (let i = 0; i < 4; i++) { const t = t0 + i * 0.32, s = AC.createBufferSource(); s.buffer = acNoise; const bp = AC.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.setValueAtTime(700, t); bp.frequency.linearRampToValueAtTime(1600, t + 0.22); bp.Q.value = 1.2;
@@ -947,12 +942,11 @@ function whoosh() {   // air going in: the pump's strokes
 function useE() {
   const E = EQ(), sel = E ? E.sel() : null;
   if (rocketAimed()) {
-    if (sel === 'pump') { whoosh(); hideRocket(); SV().set('rocketTaken', true); pumpUp(true); if (E) { E.add('rocket'); E.say('You pump the rocket up. It is light enough to carry.', 3.5); } }
+    if (sel === 'pump') { whoosh(); hideRocket(); SV().set('rocketTaken', true); if (E) { E.add('rocket'); E.say('You pump the rocket up. It is light enough to carry.', 3.5); } }
     else if (E && E.has('pump')) E.say('It needs air.  (Scroll to the air pump.)', 3);
     else if (E) E.say('It needs air.', 2.5);
     return;
   }
-  if (sel === 'pump') { const first = pumpUp(false); if (E) E.say(first ? 'You pump air back in. The castle holds.' : 'The castle is full of air.', 3); }
 }
 
 let ready = false;

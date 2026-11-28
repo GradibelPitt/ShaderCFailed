@@ -21,6 +21,8 @@ function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; le
 
 /* ---------------- the save ---------------- */
 const SAVE = window.SCF_SAVE || { get: () => undefined, set() {} };
+// the achievement 终极神速: here without ever having been to the level-select hall, and without Admin settings having unlocked the levels
+if (window.SCF_ACH && !SAVE.get('hubSeen') && !SAVE.get('pcPower') && !SAVE.get('allLevels') && !SAVE.get('adminUsed')) setTimeout(() => window.SCF_ACH.unlock('speed'), 3000);   // (once the station is up on the screen)
 SAVE.set('scene', 'moon');
 { const v = Array.isArray(SAVE.get('visited')) ? SAVE.get('visited').slice() : []; if (!v.includes('moon')) { v.push('moon'); SAVE.set('visited', v); } }   // the level-select hall gets a MOON STATION line
 
@@ -1469,7 +1471,7 @@ canvas.style.display = 'block';
 let last = -1, fadeT = 0;
 function frame(now) {
   requestAnimationFrame(frame);
-  if (last < 0) last = now; const dt = clamp((now - last) / 1000, 0, 1 / 20); last = now; uTime.value += dt; fadeT += dt;
+  if (last < 0) last = now; const dt = clamp((now - last) / 1000, 0, 1 / 20); last = now; uTime.value += dt; if (!(window.SCF_LOADING && SCF_LOADING.active)) fadeT += dt;   // the arrival (fade, the name) waits for the loading screen to go
   if (!(window.SCF_G && window.SCF_G.isOpen())) { if (CAR.on) drive(dt); else step(dt); }
   carFrame(dt); megaFrame(uTime.value);
   placeCamera(uTime.value); uCam.value.copy(camera.position);

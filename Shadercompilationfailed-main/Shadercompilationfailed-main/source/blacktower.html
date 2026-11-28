@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-level="tower">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>棋格幻境 · 黑塔 The Black Tower</title>
+<!-- The Black Tower, the last place: on a page of its own for now (js/blacktower.js). Nothing leads here yet. -->
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden}
+  #c{position:fixed;inset:0;width:100%;height:100%;display:none;outline:none;cursor:pointer;background:#000}
+  #err{position:fixed;left:12px;bottom:12px;max-width:80vw;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;color:#f99;white-space:pre-wrap;display:none;z-index:5}
+</style>
+<script type="importmap">
+{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+}}
+</script>
+</head>
+<body>
+<script src="js/loading.js"></script>
+<canvas id="c" tabindex="0" aria-label="The Black Tower"></canvas>
+<div id="err"></div>
+<script>
+  window.__showErr = function (m) { var e = document.getElementById('err'); e.style.display = 'block'; e.textContent += String(m) + '\n'; };
+  window.addEventListener('error', function (e) { window.__showErr(e.message || (e.target && e.target.src) || 'error'); }, true);
+  window.addEventListener('unhandledrejection', function (e) { window.__showErr(e.reason && e.reason.message || e.reason); });
+</script>
+<script src="js/mouse.js"></script>
+<script src="js/save.js"></script>
+<script src="js/achieve.js"></script>
+<script src="js/gmenu.js"></script>
+<script type="module" src="js/blacktower.js"></script>
+</body>
+</html>

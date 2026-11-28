@@ -347,14 +347,14 @@ function updateHub(dt){
 function hubGo(i){
   windOff();ttlOff();lsOff();canvas.style.cursor='';HB.cur='';G.hint=0;
   const go=HUB_ROWS[i].go;
-  if(go==='pool'){location.href='playroom.html';return;} // the playroom and its pool are a page of their own
-  if(go==='moon'){location.href='moonstation.html';return;} // the Moon's station, a page of its own
-  if(go==='river'){location.href='playroom.html#river';return;} // the river hall up the shaft over the size gun is built into the playroom's page
-  if(go==='mirror'){location.href='playroom.html#mirror';return;} // the PS2 reflection behind the glass at the end of the playroom's low pink tube, built into the playroom's page
+  if(go==='pool'){(window.scfGo?scfGo('playroom.html'):(location.href='playroom.html'));return;} // the playroom and its pool are a page of their own
+  if(go==='moon'){(window.scfGo?scfGo('moonstation.html'):(location.href='moonstation.html'));return;} // the Moon's station, a page of its own
+  if(go==='river'){(window.scfGo?scfGo('playroom.html#river'):(location.href='playroom.html#river'));return;} // the river hall up the shaft over the size gun is built into the playroom's page
+  if(go==='mirror'){(window.scfGo?scfGo('playroom.html#mirror'):(location.href='playroom.html#mirror'));return;} // the PS2 reflection behind the glass at the end of the playroom's low pink tube, built into the playroom's page
   // both of the others are in the first chamber, on this same page
   Snd.mute=false;if(Snd.ctx){Snd.master.gain.setTargetAtTime(0.9,Snd.ctx.currentTime,0.5);Snd.pad.gain.setTargetAtTime(0.05,Snd.ctx.currentTime,0.5);}
   G.shock=0;G.fovAdd=0;G.fall=0;G.told=false;loadLevel(0);G.fade=1;G.mode='play';
-  if(go==='ladder')toLadder(LADDER_MID);
+  if(go==='ladder'){toLadder(LADDER_MID);if(window.SCF_LOADING)SCF_LOADING.wait(()=>poolAllReady()||G.mode!=='play',{fadeIn:0});} // behind the loading screen until the pool below is built
   if(go==='bounce'||go==='store'){toLadder(LADDER_MID);hubWarp(go);}
 }
 // The bounce house and the store are reached through the inverted pool (js/poolflip.js, which loads them both). Wait behind the white
@@ -367,6 +367,7 @@ function hubWarp(go){
     window.__poolWarpTo=go;poolHandOver();
   };
   poolPreload();hold();
+  if(window.SCF_LOADING&&!ready())SCF_LOADING.wait(()=>(ready()&&G.mode==='pool')||(G.mode!=='play'&&G.mode!=='pool'),{fadeIn:0});
 }
 // level1.html#store-exit: out of the store's back corridor on a page without the pool (js/store.js, reached from the river hall through the
 // cinema). Down the ladder into the inverted pool, and out of the store's tunnel into it, walking away from the store.
@@ -374,9 +375,10 @@ function storeExitWarp(){
   G.shock=0;G.fovAdd=0;G.fall=0;G.told=false;loadLevel(0);G.fade=1;G.mode='play';toLadder(LADDER_MID);
   const hold=()=>{if(G.mode!=='play')return;if(!window.__poolReady){G.fade=1;requestAnimationFrame(hold);return;}window.__poolWarpOut='store';poolHandOver();};
   hold();
+  if(window.SCF_LOADING)SCF_LOADING.need(()=>(window.__poolReady&&G.mode==='pool')||(G.mode!=='play'&&G.mode!=='pool'));
 }
 function tickHub(dt){
-  if(HB.title>=0){HB.title+=dt;if(HB.title>=TTL_END){ttlOff();SCF_SAVE.set('titleSeen',true);}else ttlDraw(HB.title);}
+  if(HB.title>=0&&!(window.SCF_LOADING&&SCF_LOADING.active)){HB.title+=dt;if(HB.title>=TTL_END){ttlOff();SCF_SAVE.set('titleSeen',true);}else ttlDraw(HB.title);}
   if(HB.title>=0)G.fade=1; // daylight waits behind the black until the name has been and gone
   else if(HB.pick<0){if(G.fade>0)G.fade=Math.max(0,G.fade-dt/2.6);} // out of the white, the way eyes take a moment in daylight
   else{HB.pt+=dt;

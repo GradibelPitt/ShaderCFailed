@@ -878,18 +878,21 @@ function diveFx(){
   if(!G.splash&&ey<WAT_Y+0.15){G.splash=true;Snd.tone(110,1.6,'sine',0.11,0,true,48);Snd.noise(0.9,420,0.7,0.07,1600);}
   if(ey>WAT_Y+0.3)G.splash=false;
   if(G.drown<0.85||G.cu<WAT_Y-DIVE-EYE-0.8)G.gone=false; // climbed back up (or on down again) out of the deep green: going down again goes through again
-  if(G.drown>=1&&!G.gone&&window.__poolReady){G.gone=true;poolHandOver();} // if the pool is not built yet you just hang in the dark water until it is
+  // if the pool and the two places behind its ENTER holes are not all built yet, you hang in the dark water until they are, behind the
+  // loading screen (in the same dark green): built before you get there, nothing stutters down in the pool
+  if(G.drown>=1&&!G.gone){if(poolAllReady()){G.gone=true;poolHandOver();}else if(window.SCF_LOADING&&!SCF_LOADING.active)SCF_LOADING.wait(()=>poolAllReady()||G.drown<0.85||G.mode!=='play',{bg:'#01090b',fadeIn:700});}
 }
 // The inverted pool is built in the background as soon as you get on the ladder (js/poolflip.js, its own canvas over this one),
 // and takes the screen deep under the water, where both pictures are the same dark green. Same page, nothing reloads.
 let poolLoading=false;
+const poolAllReady=()=>!!window.__poolReady&&!!(window.__bounceReady||window.__bounceFailed)&&!!(window.__storeReady||window.__storeFailed);
 function poolPreload(){
   if(poolLoading)return;poolLoading=true;
   import('./poolflip.js').catch(e=>{poolLoading=false;console.error('inverted pool failed to load',e);});
 }
 function poolHandOver(){
   const held=[...keys];keys.clear();say('');
-  try{Snd.droneOff();if(Snd.ctx)Snd.silence();}catch(e){}
+  try{Snd.mute=true;Snd.droneOff();if(Snd.ctx)Snd.silence();}catch(e){} // (mute even if the sound has not started yet: it must not start up playing down there)
   G.mode='pool';
   const c=document.getElementById('c');c.style.opacity='0';c.style.transition='opacity 0.5s linear';
   window.__poolStart(held);
@@ -1089,7 +1092,7 @@ const MOON_SVG='<svg viewBox="0 0 120 120" width="120" height="120" aria-hidden=
 const GB_PAGES=[
   {img:'img/help-moons.jpg',cap:'a moon',t:'Moons',b:'See a moon? Walk up to it and press <kbd>E</kbd> to collect it.'},
   {img:'img/help-window.jpg',cap:'a window',t:'The rooms behind the windows',b:'Explore the rooms behind the windows&hellip; if you can figure out how to get in.'},
-  {img:'img/help-stairs.jpg',cap:'mini stairs',t:'Mini stairs',b:'These mini stairs look fun&hellip; I want to crouch down and take a closer look.'},
+  {img:'img/help-stairs.jpg',cap:'mini stairs',t:'Mini stairs',b:'Walk into one of these mini stairs crouched down (hold <kbd>C</kbd>) and you shrink. Do it again to grow back. Small, you fit where you could not before.'},
   {img:'img/help-wallstairs.jpg',cap:'stairs on the wall',t:'Stairs up the wall',b:'Walk up the big stairs on the wall and keep going: they turn you over, and the ceiling becomes your floor.'},
   // the last page is not for reading yet: every word of it has gone to question marks
   {img:'img/help-bigmoon.jpg',cap:'??? ???? ???????',t:'??? ???? ???????',b:'???? ??? ???? ??? ?????, ?????? ??? ????? ?? ??? ??? ?????, ?????? ??? ?????? ????. ???? ?? (?? ????) ??????? ?? ???????, ??? ????? ??.'},

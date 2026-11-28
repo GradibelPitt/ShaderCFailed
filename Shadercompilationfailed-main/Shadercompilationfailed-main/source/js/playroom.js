@@ -712,7 +712,7 @@ const ABC_STAIRS = [];   // { x, z, r }: where the little staircases stand (for 
     for (let d = 0.03; d < 0.78; d += 0.085) add(new THREE.BoxGeometry(W - 0.06, 0.018, 0.062), white, 0, 0, d + 0.031, { parent: back, col: false });
     for (const sx of [-1, 1]) add(new THREE.BoxGeometry(0.04, 0.04, 0.8), white, sx * (W / 2 - 0.04), -0.02, 0.4, { parent: back, col: false });
     add(new THREE.BoxGeometry(W, 0.02, 0.8), white, 0, -0.012, 0.4, { parent: back, cast: false, col: true }).visible = false;   // (its collider)
-    for (const sx of [-1, 1]) add(new THREE.BoxGeometry(0.04, 0.42, 0.04), white, L.x + sx * (W / 2 - 0.06), 0.2, 24.25, { rx: 0.35 }); }   // the prop under it
+  }
   add(new THREE.BoxGeometry(W, L.seatY + 0.01, zh - L.z0), white, L.x, (L.seatY + 0.01) / 2, (L.z0 + zh) / 2, { cast: false, col: true }).visible = false;   // the seat, solid
   // a folded towel at the foot
   add(new RoundedBoxGeometry(0.4, 0.05, 0.26, 3, 0.02), std({ color: 0x6fc8d8, roughness: 0.9 }), L.x + 0.04, L.seatY + 0.035, L.z0 + 0.25, { ry: 0.12, col: false });
@@ -728,7 +728,7 @@ const ABC_STAIRS = [];   // { x, z, r }: where the little staircases stand (for 
     const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = ry; scene.add(g);
     for (let i = 0; i < 3; i++) { for (let j = 0; j <= i; j++) add(blockG, pickM(), (i - 1) * B, B / 2 + j * B, 0, { parent: g, col: false });
       add(new THREE.BoxGeometry(B, (i + 1) * B, B), blockMat[0], (i - 1) * B, (i + 1) * B / 2, 0, { parent: g, cast: false, col: true }).visible = false; }
-    ABC_STAIRS.push({ x, z, r: 0.17 });
+    ABC_STAIRS.push({ x, z, r: 0.28 });
   };
   stair(-6.45, 22.75, 0.5); stair(-4.75, 24.35, -2.3);
   for (const [x, y, z, rx, ry, rz] of [[-6.1, B / 2, 23.5, 0, 0.6, 0], [-6.25, B / 2, 23.62, 0, 1.3, 0], [-6.18, B * 1.5, 23.56, 0, 0.2, 0], [-4.9, B / 2, 22.85, 0, 0.9, 0], [-4.62, B * 0.62, 23.25, 0.5, 0.3, 0.9], [-6.7, B / 2, 24.2, 0, 2.1, 0], [-5.2, B / 2, 22.35, 0, 0.35, 0]])
@@ -1183,17 +1183,19 @@ function chairNear() { if (player.mode !== 'walk' || player.swim) return false; 
 function sitDown() {
   player.mode = 'sit'; player.crouch = false; cToggledOn = false; player.vel.set(0, 0, 0); player.mantle = null;
   player.pos.set(LOUNGER.x, LOUNGER.seatY + 0.012, LOUNGER.seatZ + 0.15); player.h = H_CROUCH * 1.2; player.yaw = 0; player.pitch = -0.05; epEl.style.display = 'none';
+  if (!(MIR && MIR.on) && window.SCF_ACH) window.SCF_ACH.unlock('chair');   // (in the real room, not its reflection)
 }
 function standUp() { player.mode = 'walk'; player.pos.set(LOUNGER.x + 0.62, 0.005, LOUNGER.seatZ); player.vel.set(0, 0, 0); player.onGround = true; player.rideCool = 0.3; }
-// crouched against one of the alphabet staircases, pushing toward it: your size changes (as on the little stairs in the checkerboard rooms)
-let abcPush = 0, abcCool = 0;
+// crouch anywhere near one of the alphabet staircases (any side, still or moving): your size changes (as on the little stairs in the
+// checkerboard rooms). Once per crouch: stand up (or step away) and crouch again to change back.
+let abcArmed = true, abcCool = 0;
 function abcStep(dt) {
-  abcCool = Math.max(0, abcCool - dt); if (abcCool > 0 || player.mode !== 'walk' || player.swim || !player.crouch || !player.onGround) { abcPush = 0; return; }
-  const p = player.pos, sy = Math.sin(player.yaw), cy = Math.cos(player.yaw), fw = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0), st = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
-  const tx = -sy * fw + cy * st, tz = -cy * fw - sy * st; let on = false;
-  for (const A of ABC_STAIRS) { const dx = A.x - p.x, dz = A.z - p.z, d = Math.hypot(dx, dz); if (d < A.r + PR + 0.1 && dx * tx + dz * tz > 0.02) { on = true; break; } }
-  if (!on) { abcPush = 0; return; }
-  abcPush += dt; if (abcPush < 0.18) return; abcPush = 0; abcCool = 1.6;
+  abcCool = Math.max(0, abcCool - dt);
+  const p = player.pos; let near = false;
+  for (const A of ABC_STAIRS) if (Math.hypot(A.x - p.x, A.z - p.z) < A.r + PR + 0.4) { near = true; break; }
+  if (!near || !player.crouch || player.mode !== 'walk' || player.swim) { abcArmed = true; return; }
+  if (!abcArmed || abcCool > 0 || !player.onGround) return;
+  abcArmed = false; abcCool = 0.6;
   const to = !small, S = window.__sizeGunScene; if (!to && !S.can(false)) return;
   S.apply(to); SAVE.set('small', to); if (window.SizeGun) window.SizeGun.refresh();
   if (AC) try { const t = AC.currentTime, o = AC.createOscillator(), g = AC.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(to ? 660 : 330, t); o.frequency.exponentialRampToValueAtTime(to ? 1320 : 165, t + 0.25);
@@ -1845,7 +1847,7 @@ function updateCollapse(dt, now) {
   let fadeV = Math.max(C.flash * 0.85, 0);
   if (C.buriedAt >= 0) fadeV = 1;
   grade.uniforms.uFade.value = fadeV;
-  if (C.buriedAt >= 0 && !C.done && t > C.buriedAt + 1.6) { C.done = true; location.href = 'level1.html'; }
+  if (C.buriedAt >= 0 && !C.done && t > C.buriedAt + 1.6) { C.done = true; (window.scfGo?scfGo('level1.html'):(location.href='level1.html')); }
   if (C.rumble && C.buriedAt >= 0 && t > C.buriedAt + 0.9) { try { C.rumble.g.gain.setTargetAtTime(0.0001, AC.currentTime, 0.25); } catch (e) {} }
 }
 // knocked flat, looking up at what is still coming down
@@ -2027,6 +2029,9 @@ window.__cinemaReturn = (st) => {   // walked back down the corridor behind the 
 };
 // playroom.html#cinemadoor: arriving from the cinema's corridor on another page (the level pages have the store too)
 if (location.hash === '#cinemadoor') { openRiverDoor(true); player.pos.copy(RH.corrPoint(RH.CORR.W0 - 0.4, 0, 0.005)); player.yaw = RH.CORR.yawIn + Math.PI; player.pitch = 0; player.vel.set(0, 0, 0); placeCamera(0); loadStore(); }
+// arriving straight in the river hall (or at its door, out of the cinema): the store behind that door is built behind the loading screen too,
+// rather than in the background once you are walking about
+if ((location.hash === '#river' || location.hash === '#cinemadoor') && window.SCF_LOADING) { loadStore(); window.SCF_LOADING.hold(() => window.__storeReady || window.__storeFailed); }
 function frame(now) {
   if (awayStore) return;   // the cinema has the screen
   requestAnimationFrame(frame);
@@ -2051,7 +2056,7 @@ function frame(now) {
   const inTunnel = cp.y > 1.9 && cp.y < 10 && (cp.z < Z0 - 0.3 || cp.x > RX + 0.3) ? 1 : 0;
   RH.update(dt, cp, under, AC);
   if (RH.k > 0.5 && !riverSeen) { riverSeen = true; markVisited('river'); loadStore(); }
-  if (music) { const gn = music.out && music.out.gain; const mq = MIR && MIR.on ? 0.3 : 1; if (gn) { if (music.g0 === undefined) music.g0 = gn.value; gn.value = music.g0 * (1 - 0.85 * RH.k) * mq; } else if (music.el) music.el.volume = 0.3 * (1 - 0.85 * RH.k) * mq; }   // the playroom's music is far away up here
+  if (music) { const gn = music.out && music.out.gain; const mq = MIR && MIR.on ? 0 : 1;   /* no music at all in the mirror */ if (gn) { if (music.g0 === undefined) music.g0 = gn.value; gn.value = music.g0 * (1 - 0.85 * RH.k) * mq; } else if (music.el) music.el.volume = 0.3 * (1 - 0.85 * RH.k) * mq; }   // the playroom's music is far away up here
   wUni.uTime.value = time; wUni.uCam.value.copy(cp);
   grade.uniforms.uTime.value = time; grade.uniforms.uUnder.value = under; grade.uniforms.uFade.value = leaving ? grade.uniforms.uFade.value : Math.max(fade, corrDark());
   if (!bookSeen) {

@@ -186,7 +186,7 @@ function sceneVoid(C,VP,time){
   drawVoid(C,VP,time);gl.disable(gl.DEPTH_TEST);
 }
 function tickVoid(dt){
-  if(typeof rocketTick==='function')rocketTick(dt);
+  if(typeof rocketTick==='function'&&rocketTick(dt)===true)return false; // the rocket's film has the screen (js/rocketlaunch.js): nothing to draw under it
   if(G.mode==='end'){ // nothing. Then daylight: the field of the white screen (js/hub.js).
     G.endT+=dt;gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);
     if(G.endT>4)enterHub();

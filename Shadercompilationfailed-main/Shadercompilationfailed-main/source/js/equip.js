@@ -3,7 +3,7 @@
 //   items        the ids you are carrying, in the order they were picked up: 'gun' (the size gun), 'socket' (power strip), 'pump' (air pump), 'rocket'
 //   itemSel      which of them is in your hand (an index into items)
 //   pcPower      true once the power strip is plugged into the computer behind the level-select screen (js/hubpc.js)
-//   castleFixed  true once the bounce house has been pumped up: it no longer comes down (js/bounce.js)
+//   castleFixed  (no longer used: the air pump does not stop the bounce house coming down any more; it only takes the rocket)
 //   rocketTaken  true once the inflatable rocket has been carried out of the bounce house (js/bounce.js)
 // With more than one thing, the mouse wheel changes which one is in your hand. Each scene decides what E does with it:
 // the scene asks window.Equip.sel() and calls Equip.remove / Equip.say.

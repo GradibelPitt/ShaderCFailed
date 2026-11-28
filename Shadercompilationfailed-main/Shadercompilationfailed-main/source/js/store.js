@@ -286,8 +286,8 @@ for (const x of [7.95, 5.95, 3.65, 1.4]) for (let z = 1.2; z < D - 0.5; z += 2.4
 /* up through the ceiling: a vent, a dropping ladder, a winding duct,  */
 /* and at its far end, down through a box office's ceiling, a cinema   */
 /* ------------------------------------------------------------------ */
-// In the back corner by the EXIT, a vent in the ceiling: E opens it and an iron ladder drops. At the top you crawl into the duct at any
-// size (at full size on hands and knees: it is low). It winds over the shop and on beyond its west wall, lit by a few work lamps, to a grille in its
+// In the back corner by the EXIT, a vent in the ceiling: E opens it and an iron ladder drops. At the top, the duct is too narrow for you
+// as you are (only shrunk do you fit). It winds over the shop and on beyond its west wall, lit by a few work lamps, to a grille in its
 // floor with light coming up through it: the ceiling vent of an abandoned cinema's box office (E opens that one too, and a ladder drops).
 // The box office stands just inside the cinema's front doors; behind it the foyer, the concession stand, the ticket check, a corridor,
 // and at the end of that the one screen, a giant-screen hall. All in this same scene, west of the shop (x < 0) and over it (y > CEIL),
@@ -1043,7 +1043,7 @@ function placeCamera(dt) {
 /* ---- climbing ladders, crawling the duct ---- */
 // player.mode: 'walk' or 'ladder' (on H.ladder, H = player.lad). At the top of a ladder W takes you into the duct, if you fit.
 // In the duct, step onto an open vent's opening and you are on the top of its ladder, facing it.
-let ladLock = false;
+let ladLock = false, narrowSaid = -9;
 const inDuctY = (y, x = player.pos.x, z = player.pos.z) => y > CEIL - 0.25 && inR(DUCT_BB, x, z);   // up in the duct (the hall's upper rows are higher, but nowhere near it)
 const ladSpot = (H) => [H.x + H.n[0] * 0.12, H.z + H.n[1] * 0.12];
 const ladTop = (H) => H.ceilY - player.h + 0.04;
@@ -1067,9 +1067,9 @@ function updateLadder(dt) {
   const top = ladTop(H), y0 = p.y; p.y = clamp(p.y + fw * (keys.ShiftLeft || keys.ShiftRight ? 1.3 : 0.8) * dt, H.floorY, top);
   if (Math.floor(y0 / 0.16) !== Math.floor(p.y / 0.16)) clank(0.25);
   player.bob += Math.abs(p.y - y0);
-  if (fw > 0 && p.y >= top - 1e-4 && !ladLock) {   // the top: into the duct
-    player.mode = 'walk'; player.crouch = true; cToggledOn = false; player.h = Math.min(player.h, DUCT_H - 0.03);   // in at any size, crawling
-    player.lad = null; p.set(H.into[0], DUCT_Y, H.into[1]); player.yaw = H.ductYaw; player.pitch = 0; player.onGround = true; player.ground = 0.12; return;
+  if (fw > 0 && p.y >= top - 1e-4 && !ladLock) {   // the top: into the duct, if you are small enough
+    if (scaleK > 0.5) { if (time - narrowSaid > 2.5) { narrowSaid = time; if (window.Equip) window.Equip.say('The vent is too narrow to crawl into.', 2.5); } return; }   // only shrunk do you fit
+    player.mode = 'walk'; player.lad = null; p.set(H.into[0], DUCT_Y, H.into[1]); player.yaw = H.ductYaw; player.pitch = 0; player.onGround = true; player.ground = 0.12; return;
   }
   if (fw < 0 && p.y <= H.floorY + 1e-4) { player.mode = 'walk'; player.lad = null; p.x += H.n[0] * 0.2; p.z += H.n[1] * 0.2; player.onGround = true; return; }   // off the bottom, backwards
   if (keys.Space) { player.mode = 'walk'; player.lad = null; p.x += H.n[0] * 0.14; p.z += H.n[1] * 0.14; player.vel.set(H.n[0] * 0.5, 0, H.n[1] * 0.5); player.onGround = false; }   // let go
@@ -1217,7 +1217,7 @@ function leave() {
   const st = { port: 0, d, u, y: p.y, yaw: player.yaw - P.yawIn, pitch: player.pitch, vs: v.x * P.dx + v.z * P.dz, vu: v.x * -P.dz + v.z * P.dx, vy: v.y, h: player.h, crouch: player.crouch, bob: player.bob, small, scale: scaleK };
   if (!SOLO && !window.__storeReturn) {   // on the playroom's page (reached from the river hall through the cinema): to the pool on the level page
     on = false; for (const k in keys) keys[k] = false; try { if (AC && AC.state === 'running') AC.suspend(); } catch (e) {}
-    if (window.SCF_SAVE) window.SCF_SAVE.set('small', small); location.href = 'level1.html#store-exit'; return;
+    if (window.SCF_SAVE) window.SCF_SAVE.set('small', small); (window.scfGo?scfGo('level1.html#store-exit'):(location.href='level1.html#store-exit')); return;
   }
   if (SOLO) { st.d = Math.max(0, -d); st.vs = -st.vs; st.vu = -st.vu; st.u = -u; st.yaw += Math.PI; fromPort(st); return; }   // on its own: turned round, back in
   on = false; st.held = Object.keys(keys).filter((k) => keys[k]); for (const k in keys) keys[k] = false;
@@ -1236,7 +1236,7 @@ function toRiver(w) {
   if (window.Equip) window.Equip.prompt(null);
   if (window.__cinemaReturn) { canvas.style.display = 'none'; window.__cinemaReturn(st); return; }
   if (window.SCF_SAVE) { window.SCF_SAVE.set('small', small); window.SCF_SAVE.set('riverDoor', true); }
-  location.href = 'playroom.html#cinemadoor';
+  (window.scfGo?scfGo('playroom.html#cinemadoor'):(location.href='playroom.html#cinemadoor'));
 }
 // From the river hall's corridor (js/playroom.js): out of this one, walking toward the exit door, which stands open.
 window.__storeStartCinema = (st) => {

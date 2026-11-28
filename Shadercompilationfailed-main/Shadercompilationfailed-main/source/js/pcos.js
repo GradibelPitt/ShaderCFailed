@@ -3,11 +3,11 @@
 // Netscape, an MS-DOS prompt. The power button at the bottom left shuts it down and gives you back the field.
 // On the disk: the diary of the man this all belongs to (he has Alzheimer's, he is in hospital, he is stuck in this dream).
 // The way out of the dream: in the MS-DOS prompt, `su` with the root password (it is somewhere in his files) uploads his consciousness,
-// and he wakes in a hospital bed. That is an ending (SCF_SAVE endings: 'wake'). The hospital itself is not built yet: a card stands in for it.
+// and he wakes: in a pod, in the black tower (blacktower.html, which opens with him pulling the tube out and pushing the lid open).
 // Load this before js/gmenu.js: while the computer is open it takes every key first (so typing a G does not open the book).
 'use strict';
 (function () {
-  const PASS = ['aurora1979', 'auroravii1979', 'aurora71979'];   // Tom's rocket and the year it fell (Unfulfilled Dream.txt + the note in the Recycle Bin)
+  const PASS = ['orion1979'];   // Tom's ship and the year it was lost (Unfulfilled Dream.txt + the note in the Recycle Bin); any capitals will do
   const T = (lines) => lines.join('\n');
   // ---------------------------------------------------------------- the disk
   const F = (name, text, date) => ({ type: 'file', name, text, date: date || '' });
@@ -21,10 +21,15 @@
       'I made it into the program in 1976. Flight engineer candidate,',
       'fourth on the list. Tom Hale was second. Tom flew first.',
       '',
-      'AURORA VII went up on the morning of March 3rd, 1979.',
-      'Seventy-one seconds. I watched it from the roof of Building 4',
-      'with a cup of coffee going cold in my hand. A white flower in the',
-      'sky, and then pieces of it, falling slowly, for a long time.',
+      'ORION went up on the morning of March 3rd, 1979, with Tom on board.',
+      'I watched it from the roof of Building 4 with a cup of coffee',
+      'going cold in my hand, until it was a star, and then not even that.',
+      '',
+      'On the ninth day the telemetry stopped. On the tenth, his voice.',
+      'They kept the channel open for two years. Every night somebody sat',
+      'by the receiver and listened. Some nights it was me.',
+      'ORION never answered. Tom never came home.',
+      'I still do not know where he is. Nobody does.',
       '',
       'They shelved the whole program "pending review".',
       'The review took nineteen years. When they finally opened it again',
@@ -105,10 +110,10 @@
       'ROOT PASSWORD',
       '(because you WILL forget it, you old fool)',
       '',
-      "  the name of Tom's rocket",
+      "  the name of Tom's ship",
       '  + the year we lost him',
       '',
-      '  no spaces, no numerals in the name.',
+      '  no spaces.',
       '',
       'Now throw this away.',
     ]), '03/14/2023'),
@@ -383,20 +388,14 @@
     };
     draw();
   }
-  // ---------------------------------------------------------------- the ending (the hospital itself comes later)
+  // ---------------------------------------------------------------- out: into the black tower
+  // The upload done, the screen goes white, then black, and he is somewhere else: blacktower.html, in a pod (its opening is his waking).
   function wake() {
-    try { const s = window.SCF_SAVE; if (s) { const e = Array.isArray(s.get('endings')) ? s.get('endings').slice() : []; if (!e.includes('wake')) e.push('wake'); s.set('endings', e); } } catch (e) {}
+    try { const s = window.SCF_SAVE; if (s) s.set('uploaded', true); } catch (e) {}
     const end = el('div', 'end', ''); root.appendChild(end);
     requestAnimationFrame(() => { end.style.opacity = '1'; });
-    setTimeout(() => {
-      scr.remove(); end.classList.add('dark');
-      end.innerHTML = '<h2>ENDING I</h2><h1>Wake Up</h1><p>You open your eyes.</p><p>A white ceiling. A window that faces a wall. A monitor, beeping, slow and steady.</p><p>Somewhere down the corridor, someone says your name like it matters.</p>'
-        + '<div class="btns"><button id="pcMenu">Main menu</button><button id="pcBack">Back into the dream</button></div>';
-      const ps = end.querySelectorAll('p'); ps.forEach((p, k) => setTimeout(() => p.classList.add('in'), 900 + k * 1700));
-      setTimeout(() => end.querySelector('.btns').classList.add('in'), 900 + ps.length * 1700);
-      end.querySelector('#pcMenu').onclick = () => { location.href = 'index.html'; };
-      end.querySelector('#pcBack').onclick = () => close(true);
-    }, 2600);
+    setTimeout(() => { scr.remove(); end.classList.add('dark'); }, 2600);
+    setTimeout(() => { (window.scfGo ? scfGo('blacktower.html') : (location.href = 'blacktower.html')); }, 3600);
   }
   // ---------------------------------------------------------------- on and off
   function shutDown() {

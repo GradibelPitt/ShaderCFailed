@@ -13,7 +13,7 @@
 (function () {
   const S = () => window.SCF_SAVE, EQ = () => window.Equip;
   const RH = 7.2;           // how tall it stands once it has filled with air, in metres
-  const RK = { at: null, grow: 1, prog: null, vao: null, n: 0, VP: null, busy: false, told: false, aimed: false };
+  const RK = { at: null, grow: 1, prog: null, vao: null, n: 0, VP: null, busy: false, covered: false, told: false, aimed: false };
   { const a = S() && S().get('rocketAt'); if (Array.isArray(a) && a.length === 4) RK.at = a.slice(); }
 
   /* ---------------- the rocket itself ---------------- */
@@ -127,7 +127,7 @@
   window.rocketTick = function (dt) {
     const E = EQ();
     if (G.mode !== 'void') { if (RK.aimed && E) { E.prompt(null); RK.aimed = false; } return; }
-    if (RK.busy) { keys.clear(); P.vx = P.vz = 0; return; }
+    if (RK.busy) { keys.clear(); P.vx = P.vz = 0; return RK.covered; }   // true once the film covers the screen: the void stops drawing under it
     if (RK.grow < 1) RK.grow = Math.min(1, RK.grow + dt / 2.6);
     if (!RK.told && E && E.sel() === 'rocket' && V.on && Qs.i < 0) { RK.told = true; E.say('Press E to set the rocket down.', 3.5); }
     const a = aimed() && Qs.i < 0;
@@ -159,30 +159,48 @@
     const cv = document.createElement('canvas'); cv.id = 'rkfly';
     cv.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;z-index:60;background:#000;opacity:0;transition:opacity .7s';
     document.body.appendChild(cv); requestAnimationFrame(() => { cv.style.opacity = '1'; });
+    setTimeout(() => { RK.covered = true; }, 750);   // faded in over the void: from now on only the film is drawn (two pictures at once halved the frame rate)
     const g2 = cv.getContext('webgl2', { antialias: false });
-    if (!g2) { setTimeout(() => { location.href = 'moonstation.html'; }, 1500); return; }
+    if (!g2) { setTimeout(() => { (window.scfGo?scfGo('moonstation.html'):(location.href='moonstation.html')); }, 1500); return; }
     const sh = (ty, src) => { const s = g2.createShader(ty); g2.shaderSource(s, src); g2.compileShader(s); if (!g2.getShaderParameter(s, g2.COMPILE_STATUS)) throw new Error(g2.getShaderInfoLog(s)); return s; };
     const VS = '#version 300 es\nvoid main(){ vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }';
     const prog = (fs) => { const pr = g2.createProgram(); g2.attachShader(pr, sh(g2.VERTEX_SHADER, VS)); g2.attachShader(pr, sh(g2.FRAGMENT_SHADER, fs)); g2.linkProgram(pr);
       if (!g2.getProgramParameter(pr, g2.LINK_STATUS)) throw new Error(g2.getProgramInfoLog(pr)); return { pr, uRes: g2.getUniformLocation(pr, 'uRes'), uT: g2.getUniformLocation(pr, 'uT') }; };
-    const fly = prog(FLY); let ext = null; try { ext = prog(EXT); } catch (e) { console.warn('rocket: outside shots failed, going straight in', e); }
-    const pre = ext ? T_PRE : 0;
     const draw = (P, t, sc) => { const w = Math.max(64, Math.round(innerWidth * sc)), h = Math.max(36, Math.round(innerHeight * sc));
       if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
       g2.viewport(0, 0, w, h); g2.useProgram(P.pr); g2.uniform2f(P.uRes, w, h); g2.uniform1f(P.uT, t); g2.drawArrays(g2.TRIANGLES, 0, 3); };
-    // draw each picture once (both come out black at time 0) so the driver has really built them, and only then start the clock and the
-    // sound: the first draw of a big shader can stall for a second or more, and that must not eat the first shot
-    if (ext) draw(ext, 0, 0.25); draw(fly, 0, 0.25); g2.finish();
-    let t0 = -1, q = 1, last = 0;
+    // build both pictures and draw each once (both come out black at time 0) so the driver has really built them, and only then start the
+    // clock and the sound: the first draw of a big shader can stall for a second or more, and that must not eat the first shot
+    let fly = null, ext = null;
+    const build = () => {
+      fly = prog(FLY); ext = null; try { ext = prog(EXT); } catch (e) { console.warn('rocket: outside shots failed, going straight in', e); }
+      if (ext) draw(ext, 0, 0.25); draw(fly, 0, 0.25); g2.finish();
+    };
+    build();
+    const pre = ext ? T_PRE : 0;
+    // if the graphics driver drops this picture (it can, with the game's own still alive beneath), wait for it back and carry on where it was
+    let lost = false;
+    cv.addEventListener('webglcontextlost', (e) => { e.preventDefault(); lost = true; try { if (AC && AC.state === 'running') AC.suspend(); } catch (er) {} }, false);
+    cv.addEventListener('webglcontextrestored', () => { try { build(); } catch (e) { console.error('rocket: could not rebuild the film', e); } lost = false; try { if (AC) AC.resume(); } catch (er) {} }, false);
+    // the film runs on its own clock, made of frames: a frame that comes late (the tab in the background, the driver busy, the pointer-lock
+    // notice popping up) holds the film still for that moment instead of jumping ahead, so no shot can be skipped. The sound waits with it
+    // while the page is hidden.
+    const vis = () => { try { if (!AC) return; if (document.hidden) AC.suspend(); else if (!lost) AC.resume(); } catch (e) {} };
+    document.addEventListener('visibilitychange', vis);
+    let t = -1, q = 1, last = 0, out = false;
     const step = (now) => {
-      if (t0 < 0) { t0 = now; last = now; if (ext) outsideSound(); rumble(pre); }
-      const t = (now - t0) / 1000, fdt = now - last; last = now;
+      if (out) return;
+      if (t < 0) { t = 0; last = now; if (ext) outsideSound(); rumble(pre); }
+      const fdt = now - last; last = now;
+      if (lost || !fdt) { requestAnimationFrame(step); return; }
+      t += Math.min(fdt, 200) / 1000;   // a slow computer still plays it in real time; only a real stall (a fifth of a second or more) holds it
       // keep it moving: if frames come slowly, draw smaller (and a little larger again once they come quickly)
       if (fdt > 45) q = Math.max(0.4, q * 0.85); else if (fdt < 24) q = Math.min(1, q * 1.03);
       // the shots from outside are the heavier picture: drawn a little smaller to start with
       const sc = q * Math.min(1, Math.sqrt((t < pre ? 1.1e6 : 1.6e6) / (innerWidth * innerHeight)));
       draw(t < pre ? ext : fly, t < pre ? t : t - pre, sc);
-      if (t < pre + T_END) requestAnimationFrame(step); else location.href = 'moonstation.html';
+      if (t < pre + T_END) requestAnimationFrame(step);
+      else { out = true; document.removeEventListener('visibilitychange', vis); (window.scfGo?scfGo('moonstation.html', { bg: '#fff' }):(location.href='moonstation.html')); }   // it ends in white: so does the wait for the Moon
     };
     requestAnimationFrame(step);
   }

@@ -45,7 +45,12 @@ const MENU={
 #menu button.xp.del{color:#9b1c10}#menu button.xp.del.hot{background:linear-gradient(#f27a63,#d63d22 86%,#b02a12);color:#fff;border-color:#7a1a0a}#menu button.xp.del.hot small{color:#ffe1d8}
 #menu .conf{background:#fff7d6;border:1px solid #d9b44a;padding:10px 12px;font-size:13.5px;color:#4a3a10}#menu .conf b{color:#9b1c10}
 #menu .hint{position:fixed;left:0;right:0;bottom:14px;text-align:center;color:rgba(255,255,255,.75);font-size:12px;text-shadow:0 1px 2px rgba(0,0,0,.6)}
-#menu [hidden]{display:none!important}`;
+#menu [hidden]{display:none!important}
+#menu .ach{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-bottom:1px solid #f0efe8}#menu .ach:last-child{border-bottom:0}
+#menu .ach i{flex:none;width:30px;height:30px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#fff6b0,#f1b62e 55%,#b07a10);box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),0 1px 2px rgba(0,0,0,.3)}
+#menu .ach.lock i{background:radial-gradient(circle at 35% 35%,#f4f4f0,#c9c7ba 60%,#9a988c);filter:grayscale(1)}
+#menu .ach b{display:block;font-size:14px}#menu .ach span{color:#555;font-size:12.5px}#menu .ach.lock b{color:#8a897f}#menu .ach.lock span{color:#a7a69c}
+#menu .achsel{display:flex;align-items:center;gap:8px}#menu .achsel .xp{width:auto;flex:none;padding:5px 12px}#menu .achsel .who{flex:1;text-align:center;font-size:13px;color:#333}`;
     document.head.appendChild(st);
     document.body.insertAdjacentHTML('beforeend',`<div id="menu">
   <canvas id="mtitle" aria-label="SHADER COMPILATION FAILED"></canvas>
@@ -55,7 +60,13 @@ const MENU={
       <button class="xp" id="mNew">New Game <small>新游戏</small></button>
       <button class="xp" id="mCont">Continue <small>继续游戏</small></button>
       <button class="xp" id="mLoad">Load Game <small>读取存档</small></button>
+      <button class="xp" id="mAch">Achievements <small>成就</small></button>
       <div class="info" id="minfo"></div>
+    </div>
+    <div class="body" id="machv" hidden>
+      <div class="achsel"><button class="xp" id="maPrev">&lt;</button><span class="who" id="maWho"></span><button class="xp" id="maNext">&gt;</button></div>
+      <div class="list" id="malist"></div>
+      <div class="row2"><button class="xp" id="maBack">Back <small>返回</small></button></div>
     </div>
     <div class="body" id="mlist" hidden>
       <div class="list"><table><thead><tr><th>Save</th><th>Where</th><th>Moons</th><th>Last played</th></tr></thead><tbody id="mrows"></tbody></table><div class="empty" id="mempty" hidden>No saves yet. 还没有存档。</div></div>
@@ -74,7 +85,7 @@ const MENU={
     let leaving=false,pick=null,asking=false;
     const blip=(f,d)=>{try{if(!Snd.ctx)Snd.init();const ac=Snd.ctx;if(!ac)return;if(ac.state==='suspended')ac.resume();const t=ac.currentTime,o=ac.createOscillator(),g=ac.createGain();o.type='square';o.frequency.value=f;g.gain.setValueAtTime(0.03,t);g.gain.exponentialRampToValueAtTime(0.0001,t+d);o.connect(g);g.connect(ac.destination);o.start(t);o.stop(t+d+0.02);}catch(e){}};
     const go=(slot)=>{if(leaving)return;leaving=true;S.select(slot.id);blip(220,0.25);$m('menu').classList.add('out');
-      document.body.style.transition='opacity .7s';document.body.style.opacity='0';setTimeout(()=>{location.href=S.pageFor(slot);},720);};
+      document.body.style.transition='opacity .7s';document.body.style.opacity='0';setTimeout(()=>{(window.scfGo?scfGo(S.pageFor(slot)):(location.href=S.pageFor(slot)));},720);};
     const refreshMain=()=>{const last=S.latest();$m('mCont').disabled=!last;   // Load Game stays open with no saves: it is where one is imported
       $m('minfo').textContent=last?'Last played: Save '+last.id+' — '+WHERE(last.data)+', '+when(last.updated):'No saves yet. 还没有存档。';};
     const buttons=()=>[...document.querySelectorAll('#menu .body:not([hidden]) button.xp')].filter((b)=>!b.disabled);
@@ -90,6 +101,19 @@ const MENU={
     $m('mNew').onclick=()=>go(S.newGame());
     $m('mCont').onclick=()=>{const l=S.latest();if(l)go(l);};
     $m('mLoad').onclick=()=>showList(true);
+    // Achievements: each save has its own; < and > go through the saves (the one played last first)
+    let achI=0;
+    const showAch=(on)=>{$m('mmain').hidden=on;$m('machv').hidden=!on;$m('mwt').textContent=on?'C:\\SCF\\achievements\\':'C:\\SCF\\start.exe';
+      if(!on){refreshMain();focusAt(3);return;}achI=0;paintAch();$m('maBack').focus();};
+    const paintAch=()=>{const list=S.slots(),A=window.SCF_ACH,L=A?A.LIST:[];const s=list.length?list[(achI%list.length+list.length)%list.length]:null,have=s&&A?A.of(s.data):[];
+      const shown=L.filter((a)=>have.includes(a.id));   // only the ones earned: the rest are not shown, nor how many there are
+      $m('maWho').textContent=s?'Save '+s.id+' — '+shown.length+' achievement'+(shown.length===1?'':'s'):'No saves yet. 还没有存档。';
+      $m('maPrev').disabled=$m('maNext').disabled=list.length<2;
+      $m('malist').innerHTML=s&&!shown.length?'<div class="empty">No achievements yet. 还没有成就。</div>':'';for(const a of shown){const d=document.createElement('div');d.className='ach';d.innerHTML='<i></i><div><b></b><span></span></div>';d.querySelector('b').textContent=a.name;d.querySelector('span').textContent=a.desc;$m('malist').appendChild(d);}};
+    $m('mAch').onclick=()=>showAch(true);
+    $m('maBack').onclick=()=>showAch(false);
+    $m('maPrev').onclick=()=>{achI--;paintAch();blip(660,0.04);};
+    $m('maNext').onclick=()=>{achI++;paintAch();blip(660,0.04);};
     $m('mBack').onclick=()=>showList(false);
     $m('mGo').onclick=()=>{if(pick)go(pick);};
     // Delete: ask again, in the window itself, before anything is gone
@@ -121,6 +145,7 @@ const MENU={
       if(onList&&asking){if(e.code==='Escape'){e.preventDefault();ask(false);}else if(e.code==='Enter'){e.preventDefault();document.activeElement&&document.activeElement.click();}return;}
       if(onList&&e.code==='Delete'&&pick){e.preventDefault();ask(true);return;}
       if(e.code==='Escape'&&onList){showList(false);return;}
+      if(!$m('machv').hidden){if(e.code==='Escape'){showAch(false);return;}if(e.code==='ArrowLeft'){$m('maPrev').click();return;}if(e.code==='ArrowRight'){$m('maNext').click();return;}}
       if(onList&&(e.code==='ArrowUp'||e.code==='ArrowDown')){const rows=[...$m('mrows').children];if(!rows.length)return;e.preventDefault();
         let i=rows.findIndex((r)=>r.classList.contains('sel'));i=Math.max(0,Math.min(rows.length-1,i+(e.code==='ArrowUp'?-1:1)));rows[i].onclick();rows[i].scrollIntoView({block:'nearest'});return;}
       if(onList&&e.code==='Enter'){e.preventDefault();if(pick)go(pick);return;}
